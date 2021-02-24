@@ -1,19 +1,4 @@
 {
-    "cSpell.words": [
-        "datafolder",
-        "fakeuk",
-        "genbgen",
-        "nbyte",
-        "rusttest",
-        "sgkit",
-        "smallmode",
-        "smallmodebad",
-        "statrs",
-        "testf"
-    ],
-    "python.testing.pytestArgs": [
-        "bed_reader"
-    ],
     "python.testing.unittestEnabled": false,
     "python.testing.nosetestsEnabled": false,
     "python.testing.pytestEnabled": true,

@@ -9,13 +9,19 @@
             "type": "python",
             "request": "launch",
             "program": "${file}",
-            "console": "integratedTerminal"
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder};${env:PYTHONPATH}"
+            }
         },
         {
             "name": "Python: Test debug config",
             "type": "python",
             "request": "test",
             "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder};${env:PYTHONPATH}"
+            },
             "logToFile": true
         }
     ]
