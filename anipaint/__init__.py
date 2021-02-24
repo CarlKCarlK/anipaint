@@ -3,7 +3,7 @@ import math
 import os
 from pathlib import Path
 
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 from numpy.lib.stride_tricks import as_strided
 import numpy as np
 from PIL import Image
@@ -146,6 +146,70 @@ def grid_nD(arr):
     return as_strided(arr, shape=newShape, strides=newStrides)
 
 
+# how_far_in could be a little random and based on width of stroke
+def paint_edge(
+    edge_distance,
+    brush_image,
+    how_far_in,
+    credit_range,
+    random_count,
+    keep_threshold,
+    seed=231,
+    show_work=False,
+):
+    assert (
+        brush_image.mode == "RGBA"
+    ), f"Expect images to be RGBA, not {brush_image.mode}"
+
+    candidates = np.nonzero(edge_distance == how_far_in)
+
+    average_brush = int(np.array(brush_image)[:, :, 0:2].mean() + 0.5)
+    count_these = (edge_distance >= credit_range[0]) * (edge_distance < credit_range[1])
+
+    rng = np.random.RandomState(seed=seed)  # random number generator
+
+    im1 = Image.new("RGBA", list(edge_distance.shape)[::-1], (0, 0, 0, 0))
+
+    def how_dark(image):
+        score = np.where(
+            count_these, np.array(image)[:, :, 0:-1].mean(axis=-1), average_brush
+        ).mean()
+        return score
+
+    old_darkness = how_dark(im1)
+    for _ in range(random_count):
+        i = rng.choice(len(candidates[1]))
+        x, y = candidates[0][i], candidates[1][i]
+        dx, dy = directions[0][x, y], directions[1][x, y]
+        im2 = composite(
+            im1,
+            brush_image,
+            y,
+            x,
+            -math.degrees(math.atan2(dy, dx)),
+            sprite_factor=1,
+            draw_debug_line=False,
+        )
+        new_darkness = how_dark(im2)
+        diff = new_darkness - old_darkness
+        if show_work:
+            print(f"{diff:,}")
+            plt.plot(y, x, "o")
+            # plt.quiver(y,x,-dyr,-dxr,angles='xy',width=.002)
+            plt.imshow(im2)
+            plt.show()
+        if diff > keep_threshold:
+            old_darkness = new_darkness
+            im1 = im2
+        elif show_work:
+            logging.info("don't keep")
+    # plt.imshow(im1)
+    # im1.save(tmp_path / f"edge{how_far_in}_{random_count}_{keep_threshold}.png")
+    return im1
+    # plt.imshow(im1)
+    # plt.show()
+
+
 if __name__ == "__main__":
 
     logging.basicConfig(level=logging.INFO)
@@ -169,5 +233,19 @@ if __name__ == "__main__":
         r"E:\Dropbox\Watercolor Animation Assets\Comp 2\Comp 2\cache",
         runner=runner,
     )
+
+    brush_file = "brushes/PaintStrokes (0-00-00-04).png"
+    brush_image = Image.open(shared_datadir / brush_file)
+
+    im1 = paint_edge(
+        edge_distance,
+        brush_image,
+        how_far_in=10,
+        credit_range=[1, 20],
+        random_count=100,
+        keep_threshold=0.1,
+    )
+    plt.imshow(im1)
+    plt.show()
 
     print("!!!cmk")
