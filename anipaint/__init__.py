@@ -162,9 +162,9 @@ def paint_edge(
     ), f"Expect images to be RGBA, not {brush_image.mode}"
 
     candidates = np.nonzero(edge_distance == how_far_in)
-
     average_brush = int(np.array(brush_image)[:, :, 0:2].mean() + 0.5)
     count_these = (edge_distance >= credit_range[0]) * (edge_distance < credit_range[1])
+    directions = find_directions(edge_distance)
 
     rng = np.random.RandomState(seed=seed)  # random number generator
 
@@ -224,7 +224,7 @@ if __name__ == "__main__":
     edge_distance = cached_edge_distance(matte_path, shared_datadir / "Comp 2")
 
     # edge_distance = find_edge_distance(matte_path, max_distance=10)
-    directions = find_directions(edge_distance)
+    # directions = find_directions(edge_distance)
 
     runner = LocalMultiThread(12)
 
