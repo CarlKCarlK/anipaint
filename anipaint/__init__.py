@@ -1,11 +1,53 @@
 import logging
+import math
+import os
 from pathlib import Path
 
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 from numpy.lib.stride_tricks import as_strided
 import numpy as np
 from PIL import Image
 from scipy.ndimage.filters import gaussian_filter
+from PIL.ImageDraw import Draw
+from pysnptools.util.mapreduce1.runner import LocalMultiThread
+from pysnptools.util.mapreduce1 import map_reduce
+
+
+def composite(
+    base_image, sprite, x, y, angle_degrees, sprite_factor, draw_debug_line=False
+):
+    # angle_degrees = math.degrees(angle_radians)-90
+    # https://stackoverflow.com/questions/37941648/unable-to-crop-away-transparency-neither-pil-getbbox-nor-numpy-are-working
+    angle_degrees = angle_degrees % 360.0
+
+    if sprite_factor != 1:
+        sprite = sprite.resize(
+            (
+                int(sprite.width * sprite_factor + 0.5),
+                int(sprite.height * sprite_factor + 0.5),
+            ),
+            resample=Image.LANCZOS,
+        )
+
+    sprite = sprite.crop(sprite.convert("RGBA").getbbox())
+    result = base_image.copy()
+
+    x0 = x + math.cos(math.radians(angle_degrees)) * sprite.width * -0.5
+    y0 = y + math.sin(math.radians(angle_degrees)) * sprite.width * -0.5
+
+    x2 = x + math.cos(math.radians(angle_degrees)) * sprite.width * 0.5
+    y2 = y + math.sin(math.radians(angle_degrees)) * sprite.width * 0.5
+    if draw_debug_line:
+        draw = Draw(result)
+        draw.line([(x0, y0), (x2, y2)], fill="red", width=sprite.height)
+
+    rot = sprite.rotate(-angle_degrees, expand=True)
+    rot = rot.crop(rot.getbbox())
+    x1 = int(x - rot.width / 2)
+    y1 = int(y - rot.height / 2)
+    result.paste(rot, (x1, y1), mask=rot)
+
+    return result
 
 
 def find_edge_distance(matte_path, max_distance=255, threshold=127):
@@ -50,6 +92,48 @@ def find_directions(middle, sigma=7):
     return g0b, g1b
 
 
+def pre_cache_edge_distance(
+    pattern, cache_folder, runner=None, max_distance=255, threshold=127
+):
+    pattern = Path(pattern)
+
+    def mapper(matte_path):
+        cached_edge_distance(
+            matte_path, cache_folder, max_distance=max_distance, threshold=threshold
+        )
+
+    map_reduce(list(pattern.parent.glob(pattern.name)), mapper=mapper, runner=runner)
+
+
+def cached_edge_distance(matte_path, cache_folder, max_distance=255, threshold=127):
+    if ".edge_distance" in matte_path.name:
+        return
+
+    cache_folder = Path(cache_folder)
+
+    cache_path = (cache_folder / matte_path.name).with_suffix(
+        ".edge_distance{0}{1}.png".format(
+            "" if max_distance == 255 else f".md{max_distance}",
+            "" if threshold == 127 else f".th{threshold}",
+        )
+    )
+
+    if cache_path.exists():
+        cache_image = Image.open(cache_path)
+        assert cache_image.mode == "L", f"Expect images to be L, not {cache_image.mode}"
+        cache_array = np.array(cache_image)
+        return cache_array
+
+    matte_array = find_edge_distance(
+        matte_path, max_distance=max_distance, threshold=threshold
+    )
+
+    matte_image = Image.fromarray(matte_array, mode="L")
+    os.makedirs(cache_path.parent, exist_ok=True)
+    matte_image.save(cache_path, optimize=True, compress_level=0)
+    return matte_array
+
+
 # See http://drsfenner.org/blog/2015/08/game-of-life-in-numpy-2/
 def grid_nD(arr):
     assert all(_len > 2 for _len in arr.shape)
@@ -73,7 +157,17 @@ if __name__ == "__main__":
     matte_file = "Comp 2/ShirtMAtte_00000.jpg"
     matte_path = shared_datadir / matte_file
 
-    edge_distance = find_edge_distance(matte_path, max_distance=10)
+    edge_distance = cached_edge_distance(matte_path, shared_datadir / "Comp 2")
+
+    # edge_distance = find_edge_distance(matte_path, max_distance=10)
     directions = find_directions(edge_distance)
+
+    runner = LocalMultiThread(12)
+
+    pre_cache_edge_distance(
+        r"E:\Dropbox\Watercolor Animation Assets\Comp 2\Comp 2\*.*",
+        r"E:\Dropbox\Watercolor Animation Assets\Comp 2\Comp 2\cache",
+        runner=runner,
+    )
 
     print("!!!cmk")
