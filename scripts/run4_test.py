@@ -25,7 +25,7 @@ def run(runner):
             brush_pattern,
             random_count=250,
             keep_threshold=0.25,
-            candidate_range=(5, 256),
+            candidate_range=(5, 256),  # inclusive, exclusive
             credit_range=(1, 256),
             mixing_range=(20, 75),
             sprite_factor=2,
