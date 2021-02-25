@@ -146,6 +146,88 @@ def grid_nD(arr):
     return as_strided(arr, shape=newShape, strides=newStrides)
 
 
+def paint_interior(
+    edge_distance,
+    brush_image,
+    how_far_in,  # defines candidate points
+    random_count,
+    keep_threshold,
+    always_use_edge_angle=1,
+    always_use_default_angle=101,
+    default_angle_degrees=15,
+    default_angle_sd=5,
+    sprite_factor=1,
+    seed=231,
+    show_work=False,
+):
+    count_these = edge_distance >= how_far_in
+    directions = find_directions(edge_distance)
+    candidates = np.nonzero(count_these)
+
+    rng = np.random.RandomState(seed=seed)  # random number generator
+
+    im_in = Image.new("RGBA", list(edge_distance.shape)[::-1], (0, 0, 0, 0))
+
+    def how_dark(image):
+        score = np.where(count_these, np.array(image)[:, :, 0:-1].sum(axis=-1), 0).sum()
+        return score
+
+    old_sum = 0
+    best_sum = None
+    for _ in range(random_count):
+        i = rng.choice(len(candidates[1]))
+        x, y = candidates[0][i], candidates[1][i]
+        v = edge_distance[x, y]
+        fraction_interior = np.clip(
+            (v - always_use_edge_angle)
+            / (always_use_default_angle - always_use_edge_angle),
+            0,
+            1,
+        )
+        dxe, dye = directions[0][x, y], directions[1][x, y]
+        # edge_angle_degrees = math.degrees(math.atan2(dy, dx))
+        random_angle_degrees = rng.normal(default_angle_degrees, default_angle_sd)
+        dxi, dyi = (
+            math.cos(math.radians(random_angle_degrees)),
+            math.sin(math.radians(random_angle_degrees)),
+        )
+        dx, dy = (
+            fraction_interior * dxi + (1 - fraction_interior) * dxe,
+            fraction_interior * dyi + (1 - fraction_interior) * dye,
+        )
+        angle_degrees = math.degrees(math.atan2(dy, dx))
+
+        im2 = composite(
+            im_in,
+            brush_image,
+            y,
+            x,
+            -angle_degrees,
+            sprite_factor=sprite_factor,
+            draw_debug_line=False,
+        )
+
+        best_sum = best_sum or np.array(im2)[:, :, 0:-1].sum()
+        new_sum = how_dark(im2)
+        fraction_new = (new_sum - old_sum) / best_sum
+        if show_work:
+            print(f"{fraction_new:,}")
+            plt.plot(y, x, "o")
+            # plt.quiver(y,x,-dy,-dx,angles='xy',width=.002)
+            plt.imshow(im2)
+            plt.show()
+        if fraction_new > keep_threshold:
+            old_sum = new_sum
+            im_in = im2
+        elif show_work:
+            print("don't keep")
+    # plt.imshow(im_in)
+    # im_in.save(tmp_path / f"inner{how_far_in}_{random_count}_{keep_threshold}.png")
+    # plt.imshow(im_in)
+    # plt.show()
+    return im_in
+
+
 # how_far_in could be a little random and based on width of stroke
 def paint_edge(
     edge_distance,
@@ -237,15 +319,30 @@ if __name__ == "__main__":
     brush_file = "brushes/PaintStrokes (0-00-00-04).png"
     brush_image = Image.open(shared_datadir / brush_file)
 
-    im1 = paint_edge(
-        edge_distance,
-        brush_image,
-        how_far_in=10,
-        credit_range=[1, 20],
-        random_count=100,
-        keep_threshold=0.1,
-    )
-    plt.imshow(im1)
-    plt.show()
+    if True:
+        im_in = paint_interior(
+            edge_distance,
+            brush_image,
+            how_far_in=5,  # defines candidate points
+            random_count=250,
+            keep_threshold=0,
+            always_use_edge_angle=65,
+            always_use_default_angle=66,
+            sprite_factor=1,
+        )
+        plt.imshow(im_in)
+        plt.show()
+
+    if False:
+        im1 = paint_edge(
+            edge_distance,
+            brush_image,
+            how_far_in=10,
+            credit_range=[1, 20],
+            random_count=100,
+            keep_threshold=0.1,
+        )
+        plt.imshow(im1)
+        plt.show()
 
     print("!!!cmk")
