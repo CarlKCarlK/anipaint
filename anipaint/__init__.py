@@ -149,20 +149,24 @@ def grid_nD(arr):
 def paint_interior(
     edge_distance,
     brush_image,
-    how_far_in,  # defines candidate points
+    start_distance,  # defines candidate points
     random_count,
     keep_threshold,
-    always_use_edge_angle=1,
-    always_use_default_angle=101,
+    mixing_range=(0, 1),
     default_angle_degrees=15,
     default_angle_sd=5,
     sprite_factor=1,
     seed=231,
     show_work=False,
 ):
-    count_these = edge_distance >= how_far_in
+    count_these = edge_distance >= start_distance
     directions = find_directions(edge_distance)
     candidates = np.nonzero(count_these)
+
+    start_mixing, end_mixing = mixing_range
+    assert (
+        start_mixing < end_mixing
+    ), "first value in the mixing range must be less than the 2nd"
 
     rng = np.random.RandomState(seed=seed)  # random number generator
 
@@ -179,10 +183,7 @@ def paint_interior(
         x, y = candidates[0][i], candidates[1][i]
         v = edge_distance[x, y]
         fraction_interior = np.clip(
-            (v - always_use_edge_angle)
-            / (always_use_default_angle - always_use_edge_angle),
-            0,
-            1,
+            (v - start_mixing) / (end_mixing - start_mixing), 0, 1,
         )
         dxe, dye = directions[0][x, y], directions[1][x, y]
         # edge_angle_degrees = math.degrees(math.atan2(dy, dx))
@@ -222,17 +223,17 @@ def paint_interior(
         elif show_work:
             print("don't keep")
     # plt.imshow(im_in)
-    # im_in.save(tmp_path / f"inner{how_far_in}_{random_count}_{keep_threshold}.png")
+    # im_in.save(tmp_path / f"inner{start_distance}_{random_count}_{keep_threshold}.png")
     # plt.imshow(im_in)
     # plt.show()
     return im_in
 
 
-# how_far_in could be a little random and based on width of stroke
+# start_distance could be a little random and based on width of stroke
 def paint_edge(
     edge_distance,
     brush_image,
-    how_far_in,
+    start_distance,
     credit_range,
     random_count,
     keep_threshold,
@@ -243,7 +244,7 @@ def paint_edge(
         brush_image.mode == "RGBA"
     ), f"Expect images to be RGBA, not {brush_image.mode}"
 
-    candidates = np.nonzero(edge_distance == how_far_in)
+    candidates = np.nonzero(edge_distance == start_distance)
     average_brush = int(np.array(brush_image)[:, :, 0:2].mean() + 0.5)
     count_these = (edge_distance >= credit_range[0]) * (edge_distance < credit_range[1])
     directions = find_directions(edge_distance)
@@ -286,7 +287,7 @@ def paint_edge(
         elif show_work:
             logging.info("don't keep")
     # plt.imshow(im1)
-    # im1.save(tmp_path / f"edge{how_far_in}_{random_count}_{keep_threshold}.png")
+    # im1.save(tmp_path / f"edge{start_distance}_{random_count}_{keep_threshold}.png")
     return im1
     # plt.imshow(im1)
     # plt.show()
@@ -323,11 +324,10 @@ if __name__ == "__main__":
         im_in = paint_interior(
             edge_distance,
             brush_image,
-            how_far_in=5,  # defines candidate points
+            start_distance=5,  # defines candidate points
             random_count=250,
-            keep_threshold=0,
-            always_use_edge_angle=65,
-            always_use_default_angle=66,
+            keep_threshold=0.5,
+            mixing_range=[65, 66],
             sprite_factor=1,
         )
         plt.imshow(im_in)
@@ -337,7 +337,7 @@ if __name__ == "__main__":
         im1 = paint_edge(
             edge_distance,
             brush_image,
-            how_far_in=10,
+            start_distance=10,
             credit_range=[1, 20],
             random_count=100,
             keep_threshold=0.1,
