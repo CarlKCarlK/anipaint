@@ -70,7 +70,7 @@ def find_edge_distance(matte_path, max_distance=255, threshold=127):
         minplus1 = np.min(expanded, axis=(-2, -1)) + 1
         next = np.minimum(middle, minplus1)
         expanded[:, :, 1, 1] = next
-        logging.info(f"distance {i}")
+        # logging.info(f"distance {i}")
         if middle.max() < 254:
             break
     # plt.imshow(np.where(middle == 0, 256, middle), cmap="twilight", vmin=0, vmax=255)
@@ -105,11 +105,16 @@ def pre_cache_edge_distance(
     map_reduce(list(pattern.parent.glob(pattern.name)), mapper=mapper, runner=runner)
 
 
-def cached_edge_distance(matte_path, cache_folder, max_distance=255, threshold=127):
+def cached_edge_distance(
+    matte_path, cache_folder=None, max_distance=255, threshold=127
+):
     if ".edge_distance" in matte_path.name:
         return
 
-    cache_folder = Path(cache_folder)
+    if cache_folder is not None:
+        cache_folder = Path(cache_folder)
+    else:
+        cache_folder = matte_path.parent / "cache"
 
     cache_path = (cache_folder / matte_path.name).with_suffix(
         ".edge_distance{0}{1}.png".format(
@@ -147,8 +152,8 @@ def grid_nD(arr):
 
 
 def paint(
-    edge_distance,
-    brush_image,
+    matte_path,
+    brush_pattern,
     random_count,
     candidate_range=(1, 256),
     credit_range=(1, 256),
@@ -157,12 +162,11 @@ def paint(
     default_angle_degrees=15,
     default_angle_sd=5,
     sprite_factor=1,
+    cache_folder=None,
     seed=231,
     show_work=False,
 ):
-    assert (
-        brush_image.mode == "RGBA"
-    ), f"Expect brush_image to be RGBA, not {brush_image.mode}"
+    edge_distance = cached_edge_distance(matte_path, cache_folder=cache_folder)
     assert (
         candidate_range[0] < candidate_range[1]
     ), "first value in candidate_range must be less than the 2nd"
@@ -172,6 +176,15 @@ def paint(
     assert (
         mixing_range[0] < mixing_range[1]
     ), "first value in start_mixing_range must be less than the 2nd"
+
+    brush_pattern = Path(brush_pattern)
+    brush_list = []
+    for brush_path in brush_pattern.parent.glob(brush_pattern.name):
+        brush_image = Image.open(brush_path)
+        assert (
+            brush_image.mode == "RGBA"
+        ), f"Expect brush_image to be RGBA, not {brush_image.mode}"
+        brush_list.append(brush_image)
 
     candidate_points = np.nonzero(
         (edge_distance >= candidate_range[0]) * (edge_distance < candidate_range[1])
@@ -191,7 +204,7 @@ def paint(
         return score
 
     old_score = 0
-    best_improvement = None
+    best_improvement = {}
     for _ in range(random_count):
         i = rng.choice(len(candidate_points[1]))
         x, y = candidate_points[0][i], candidate_points[1][i]
@@ -211,6 +224,9 @@ def paint(
         )
         angle_degrees = math.degrees(math.atan2(dy, dx))
 
+        brush_index = rng.choice(len(brush_list))
+        brush_image = brush_list[brush_index]
+
         possible_image = composite(
             current_image,
             brush_image,
@@ -221,11 +237,12 @@ def paint(
             draw_debug_line=False,
         )
 
-        best_improvement = (
-            best_improvement or np.array(possible_image)[:, :, 0:-1].sum()
+        best_improvement[brush_index] = (
+            best_improvement.get(brush_index)
+            or np.array(possible_image)[:, :, 0:-1].sum()
         )
         new_score = how_dark(possible_image)
-        fraction_new = (new_score - old_score) / best_improvement
+        fraction_new = (int(new_score) - int(old_score)) / best_improvement[brush_index]
         if show_work:
             print(f"{fraction_new:,}")
             plt.plot(y, x, "o")
