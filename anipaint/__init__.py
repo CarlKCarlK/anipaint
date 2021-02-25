@@ -146,47 +146,60 @@ def grid_nD(arr):
     return as_strided(arr, shape=newShape, strides=newStrides)
 
 
-def paint_interior(
+def paint(
     edge_distance,
     brush_image,
-    start_distance,  # defines candidate points
     random_count,
-    keep_threshold,
+    candidate_range=(1, 256),
+    credit_range=(1, 256),
     mixing_range=(0, 1),
+    keep_threshold=0.5,
     default_angle_degrees=15,
     default_angle_sd=5,
     sprite_factor=1,
     seed=231,
     show_work=False,
 ):
-    count_these = edge_distance >= start_distance
-    directions = find_directions(edge_distance)
-    candidates = np.nonzero(count_these)
-
-    start_mixing, end_mixing = mixing_range
     assert (
-        start_mixing < end_mixing
-    ), "first value in the mixing range must be less than the 2nd"
+        brush_image.mode == "RGBA"
+    ), f"Expect brush_image to be RGBA, not {brush_image.mode}"
+    assert (
+        candidate_range[0] < candidate_range[1]
+    ), "first value in candidate_range must be less than the 2nd"
+    assert (
+        credit_range[0] < credit_range[1]
+    ), "first value in credit_range must be less than the 2nd"
+    assert (
+        mixing_range[0] < mixing_range[1]
+    ), "first value in start_mixing_range must be less than the 2nd"
 
+    candidate_points = np.nonzero(
+        (edge_distance >= candidate_range[0]) * (edge_distance < candidate_range[1])
+    )
+    credit_points = (edge_distance >= credit_range[0]) * (
+        edge_distance < credit_range[1]
+    )
+    directions = find_directions(edge_distance)
     rng = np.random.RandomState(seed=seed)  # random number generator
 
-    im_in = Image.new("RGBA", list(edge_distance.shape)[::-1], (0, 0, 0, 0))
+    current_image = Image.new("RGBA", list(edge_distance.shape)[::-1], (0, 0, 0, 0))
 
     def how_dark(image):
-        score = np.where(count_these, np.array(image)[:, :, 0:-1].sum(axis=-1), 0).sum()
+        score = np.where(
+            credit_points, np.array(image)[:, :, 0:-1].sum(axis=-1), 0
+        ).sum()
         return score
 
-    old_sum = 0
-    best_sum = None
+    old_score = 0
+    best_improvement = None
     for _ in range(random_count):
-        i = rng.choice(len(candidates[1]))
-        x, y = candidates[0][i], candidates[1][i]
+        i = rng.choice(len(candidate_points[1]))
+        x, y = candidate_points[0][i], candidate_points[1][i]
         v = edge_distance[x, y]
         fraction_interior = np.clip(
-            (v - start_mixing) / (end_mixing - start_mixing), 0, 1,
+            (v - mixing_range[0]) / (mixing_range[1] - mixing_range[0]), 0, 1,
         )
         dxe, dye = directions[0][x, y], directions[1][x, y]
-        # edge_angle_degrees = math.degrees(math.atan2(dy, dx))
         random_angle_degrees = rng.normal(default_angle_degrees, default_angle_sd)
         dxi, dyi = (
             math.cos(math.radians(random_angle_degrees)),
@@ -198,8 +211,8 @@ def paint_interior(
         )
         angle_degrees = math.degrees(math.atan2(dy, dx))
 
-        im2 = composite(
-            im_in,
+        possible_image = composite(
+            current_image,
             brush_image,
             y,
             x,
@@ -208,89 +221,27 @@ def paint_interior(
             draw_debug_line=False,
         )
 
-        best_sum = best_sum or np.array(im2)[:, :, 0:-1].sum()
-        new_sum = how_dark(im2)
-        fraction_new = (new_sum - old_sum) / best_sum
+        best_improvement = (
+            best_improvement or np.array(possible_image)[:, :, 0:-1].sum()
+        )
+        new_score = how_dark(possible_image)
+        fraction_new = (new_score - old_score) / best_improvement
         if show_work:
             print(f"{fraction_new:,}")
             plt.plot(y, x, "o")
             # plt.quiver(y,x,-dy,-dx,angles='xy',width=.002)
-            plt.imshow(im2)
+            plt.imshow(possible_image)
             plt.show()
         if fraction_new > keep_threshold:
-            old_sum = new_sum
-            im_in = im2
+            old_score = new_score
+            current_image = possible_image
         elif show_work:
             print("don't keep")
     # plt.imshow(im_in)
     # im_in.save(tmp_path / f"inner{start_distance}_{random_count}_{keep_threshold}.png")
     # plt.imshow(im_in)
     # plt.show()
-    return im_in
-
-
-# start_distance could be a little random and based on width of stroke
-def paint_edge(
-    edge_distance,
-    brush_image,
-    start_distance,
-    credit_range,
-    random_count,
-    keep_threshold,
-    seed=231,
-    show_work=False,
-):
-    assert (
-        brush_image.mode == "RGBA"
-    ), f"Expect images to be RGBA, not {brush_image.mode}"
-
-    candidates = np.nonzero(edge_distance == start_distance)
-    average_brush = int(np.array(brush_image)[:, :, 0:2].mean() + 0.5)
-    count_these = (edge_distance >= credit_range[0]) * (edge_distance < credit_range[1])
-    directions = find_directions(edge_distance)
-
-    rng = np.random.RandomState(seed=seed)  # random number generator
-
-    im1 = Image.new("RGBA", list(edge_distance.shape)[::-1], (0, 0, 0, 0))
-
-    def how_dark(image):
-        score = np.where(
-            count_these, np.array(image)[:, :, 0:-1].mean(axis=-1), average_brush
-        ).mean()
-        return score
-
-    old_darkness = how_dark(im1)
-    for _ in range(random_count):
-        i = rng.choice(len(candidates[1]))
-        x, y = candidates[0][i], candidates[1][i]
-        dx, dy = directions[0][x, y], directions[1][x, y]
-        im2 = composite(
-            im1,
-            brush_image,
-            y,
-            x,
-            -math.degrees(math.atan2(dy, dx)),
-            sprite_factor=1,
-            draw_debug_line=False,
-        )
-        new_darkness = how_dark(im2)
-        diff = new_darkness - old_darkness
-        if show_work:
-            print(f"{diff:,}")
-            plt.plot(y, x, "o")
-            # plt.quiver(y,x,-dyr,-dxr,angles='xy',width=.002)
-            plt.imshow(im2)
-            plt.show()
-        if diff > keep_threshold:
-            old_darkness = new_darkness
-            im1 = im2
-        elif show_work:
-            logging.info("don't keep")
-    # plt.imshow(im1)
-    # im1.save(tmp_path / f"edge{start_distance}_{random_count}_{keep_threshold}.png")
-    return im1
-    # plt.imshow(im1)
-    # plt.show()
+    return current_image
 
 
 if __name__ == "__main__":
@@ -321,28 +272,35 @@ if __name__ == "__main__":
     brush_image = Image.open(shared_datadir / brush_file)
 
     if True:
-        im_in = paint_interior(
+        im_in = paint(
             edge_distance,
             brush_image,
-            start_distance=5,  # defines candidate points
             random_count=250,
-            keep_threshold=0.5,
-            mixing_range=[65, 66],
-            sprite_factor=1,
+            keep_threshold=0.25,
+            candidate_range=(5, 256),
+            credit_range=(1, 256),
+            mixing_range=(20, 75),
         )
-        plt.imshow(im_in)
-        plt.show()
+        # plt.imshow(im_in)
+        # plt.show()
 
-    if False:
-        im1 = paint_edge(
+    if True:
+        im_edge = paint(
             edge_distance,
             brush_image,
-            start_distance=10,
-            credit_range=[1, 20],
             random_count=100,
             keep_threshold=0.1,
+            candidate_range=(10, 11),
+            credit_range=(1, 20),
+            mixing_range=(255, 256),
         )
-        plt.imshow(im1)
-        plt.show()
+
+    matte_image = Image.open(matte_path)
+    im3 = matte_image.copy()
+    im3.paste(im_in, (0, 0), im_in)
+    im3.paste(im_edge, (0, 0), im_edge)
+
+    plt.imshow(im3)
+    plt.show()
 
     print("!!!cmk")
