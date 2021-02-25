@@ -161,7 +161,7 @@ def paint(
     keep_threshold=0.5,
     default_angle_degrees=15,
     default_angle_sd=5,
-    sprite_factor=1,
+    sprite_factor_range=(1.0, 1.0),  # both inclusive
     cache_folder=None,
     seed=231,
     show_work=False,
@@ -176,6 +176,9 @@ def paint(
     assert (
         mixing_range[0] < mixing_range[1]
     ), "first value in start_mixing_range must be less than the 2nd"
+    assert (
+        0 < sprite_factor_range[0] <= sprite_factor_range[1]
+    ), "first value of sprite_factor_range must be more than 0 and less than or equal to the 2nd"
 
     brush_pattern = Path(brush_pattern)
     brush_list = []
@@ -204,7 +207,6 @@ def paint(
         return score
 
     old_score = 0
-    best_improvement = {}
     for _ in range(random_count):
         i = rng.choice(len(candidate_points[1]))
         x, y = candidate_points[0][i], candidate_points[1][i]
@@ -227,22 +229,37 @@ def paint(
         brush_index = rng.choice(len(brush_list))
         brush_image = brush_list[brush_index]
 
+        sprite_factor = (
+            math.exp(
+                rng.uniform(
+                    math.log(sprite_factor_range[0]), math.log(sprite_factor_range[1])
+                )
+            )
+            if sprite_factor_range[0] < sprite_factor_range[1]
+            else sprite_factor_range[0]
+        )
+        if sprite_factor != 1:
+            brush_image = brush_image.resize(
+                (
+                    int(brush_image.width * sprite_factor + 0.5),
+                    int(brush_image.height * sprite_factor + 0.5),
+                ),
+                resample=Image.LANCZOS,
+            )
+        best_improvement = np.array(brush_image)[:, :, 0:-1].sum()
+
         possible_image = composite(
             current_image,
             brush_image,
             y,
             x,
             -angle_degrees,
-            sprite_factor=sprite_factor,
+            sprite_factor=1,
             draw_debug_line=False,
         )
 
-        best_improvement[brush_index] = (
-            best_improvement.get(brush_index)
-            or np.array(possible_image)[:, :, 0:-1].sum()
-        )
         new_score = how_dark(possible_image)
-        fraction_new = (int(new_score) - int(old_score)) / best_improvement[brush_index]
+        fraction_new = (int(new_score) - int(old_score)) / best_improvement
         if show_work:
             print(f"{fraction_new:,}")
             plt.plot(y, x, "o")
