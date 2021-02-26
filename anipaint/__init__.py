@@ -189,9 +189,6 @@ def paint(
         ), f"Expect brush_image to be RGBA, not {brush_image.mode}"
         brush_list.append(brush_image)
 
-    # candidate_points = np.nonzero(
-    #     (edge_distance >= candidate_range[0]) * (edge_distance < candidate_range[1])
-    # )
     pre_candidate_points = (edge_distance >= candidate_range[0]) * (
         edge_distance < candidate_range[1]
     )
@@ -219,7 +216,6 @@ def paint(
         )
 
         candidates_len = len(candidate_points[0])
-        # print(f"cmk #cp {len(candidate_points[0])}")
         if candidates_len == 0:
             break
         i = rng.choice(candidates_len)
@@ -246,9 +242,11 @@ def paint(
         sprite_factor = (
             math.exp(
                 rng.uniform(
-                    math.log(sprite_factor_range[0]), math.log(sprite_factor_range[1])
+                    math.log(sprite_factor_range[0] ** 2),
+                    math.log(sprite_factor_range[1] ** 2),
                 )
             )
+            ** 0.5
             if sprite_factor_range[0] < sprite_factor_range[1]
             else sprite_factor_range[0]
         )
