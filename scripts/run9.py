@@ -15,7 +15,7 @@ paint(
     brush_pattern=folder / "brushes/*.png",
     random_count=500,
     outside_penalty=4,
-    paint_same_threshold=1.5,
+    paint_same_threshold=0.015,  # 1.5% difference
     keep_threshold=0,
     candidate_range=(1, 256),
     credit_range=(1, 256),

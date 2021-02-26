@@ -174,20 +174,18 @@ def paint(
         os.makedirs(output_folder, exist_ok=True)
 
     matte_path_list = sorted(matte_pattern.parent.glob(matte_pattern.name))
-
-    # !!!cmk could pass list, could only open each file once in find_same
-    skip_list = [diff <= paint_same_threshold for diff in find_same(matte_pattern)]
+    skip_list = find_skips(matte_path_list, paint_same_threshold)
 
     def mapper(matte_path_and_skip):
         matte_path, skip = matte_path_and_skip
-        print(f"painting '{matte_path.name}'")  # cmk should log
+        logging.info(f"painting '{matte_path.name}'")
 
         if output_folder is not None:
-            output_path = (output_folder / matte_path.name).with_suffix(".output.png")
+            output_path = create_output_path(matte_path, output_folder)
             if output_path.exists():
-                print(
+                logging.warn(
                     f"Output already exists, so skipping ('{output_path.name}'')"
-                )  # cmk should log as warn????
+                )
                 return output_path
 
         if skip:
@@ -218,7 +216,11 @@ def paint(
     result_w_skip_list = map_reduce(
         list(zip(matte_path_list, skip_list)), mapper=mapper, runner=runner
     )
+    result_list = fill_skips(result_w_skip_list, matte_path_list, output_folder)
+    return result_list
 
+
+def fill_skips(result_w_skip_list, matte_path_list, output_folder):
     result_list = []
     previous_noskip_result = None
     for result_w_skip, matte_path in zip(result_w_skip_list, matte_path_list):
@@ -226,16 +228,17 @@ def paint(
             if output_folder is None:
                 result_list.append(previous_noskip_result)
             else:
-                output_path = (output_folder / matte_path.name).with_suffix(
-                    ".output.png"
-                )  # !!!cmk similar code elsewhere
-                shutil.copy(previous_noskip_result, output_path)
+                output_path = create_output_path(matte_path, output_folder)
                 result_list.append(output_path)
         else:
             previous_noskip_result = result_w_skip
             result_list.append(previous_noskip_result)
-
     return result_list
+
+
+def create_output_path(matte_path, output_folder):
+    output_path = (output_folder / matte_path.name).with_suffix(".output.png")
+    return output_path
 
 
 def paint_one(
@@ -385,25 +388,23 @@ def paint_one(
     return current_image
 
 
-def pairs(sequence):
-    before = None
-    for item in sequence:
-        yield before, item
-        before = item
-
-
-def find_same(matte_pattern):
-    for before_path, after_path in pairs(
-        sorted(matte_pattern.parent.glob(matte_pattern.name))
-    ):
-        if before_path is None:
-            yield 256.0
-            continue
-        before_array = np.array(Image.open(before_path))
+def find_skips(sorted_matte_path_list, paint_same_threshold):
+    skip_list = []
+    before_array = None
+    for after_path in sorted_matte_path_list:
         after_array = np.array(Image.open(after_path))
-        result = np.abs(before_array - after_array).mean()
-        logging.info(f"{before_path.name}, {after_path.name}, {result}")
-        yield result
+        if before_array is None:
+            diff = 1.0
+        else:
+            diff = np.abs(before_array - after_array).mean() / 256.0
+        skip = diff < paint_same_threshold
+        logging.info(
+            f"'{after_path.name}'', diff from last keep {diff:.3f}, skip? {skip}"
+        )
+        skip_list.append(skip)
+        if not skip:
+            before_array = after_array
+    return skip_list
 
 
 if __name__ == "__main__":
@@ -418,7 +419,7 @@ if __name__ == "__main__":
     brush_pattern = folder / "brushes/*.png"
 
     paint(
-        output_folder=folder / "SkinMatte/Comp 2/outputs/run6a_4",
+        output_folder=folder / "SkinMatte/Comp 2/outputs/run_test1",
         matte_pattern=folder / "SkinMatte/Comp 2/Comp 2_0000*.jpg",
         brush_pattern=folder / "brushes/*.png",
         random_count=5,
@@ -428,7 +429,7 @@ if __name__ == "__main__":
         credit_range=(1, 256),
         mixing_range=(255, 256),
         sprite_factor_range=(0.25, 1),
-        paint_same_threshold=5.0,
+        paint_same_threshold=0.02,  # fraction difference
         runner=None,
     )
 

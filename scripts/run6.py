@@ -12,7 +12,7 @@ brush_pattern = folder / "brushes/*.png"
 paint(
     output_folder=folder / "SkinMatte/Comp 2/outputs/run6a_4",
     matte_pattern=folder / "SkinMatte/Comp 2/*.*",
-    brush_pattern=folder / "brushes/*.png",
+    brush_pattern=brush_pattern,
     random_count=500,
     outside_penalty=4,
     keep_threshold=0,
@@ -26,7 +26,7 @@ paint(
 paint(
     output_folder=folder / "Comp 2/Comp 2/outputs/run6b_4",
     matte_pattern=folder / "Comp 2/Comp 2/*.*",
-    brush_pattern=folder / "brushes/*.png",
+    brush_pattern=brush_pattern,
     random_count=500,
     outside_penalty=4,
     keep_threshold=0,
