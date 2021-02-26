@@ -158,6 +158,7 @@ def paint(
     candidate_range=(1, 256),
     credit_range=(1, 256),
     mixing_range=(0, 1),
+    outside_penalty=0,
     keep_threshold=0.5,
     default_angle_degrees=15,
     default_angle_sd=5,
@@ -196,15 +197,22 @@ def paint(
     credit_points = (edge_distance >= credit_range[0]) * (
         edge_distance < credit_range[1]
     )
+
+    penalty_points = edge_distance == 0
+
     directions = find_directions(edge_distance)
     rng = np.random.RandomState(seed=seed)  # random number generator
 
     current_image = Image.new("RGBA", list(edge_distance.shape)[::-1], (0, 0, 0, 0))
 
     def how_dark(image):
-        score = np.where(
-            credit_points, np.array(image)[:, :, 0:-1].sum(axis=-1), 0
-        ).sum()
+        darkness_array = np.array(image)[:, :, 0:-1].sum(
+            axis=-1
+        )  # does darkness, not mask
+        score = np.where(credit_points, darkness_array, 0).sum()
+        if outside_penalty != 0:
+            score -= np.where(penalty_points, darkness_array, 0).sum() * outside_penalty
+
         return score
 
     old_score = 0
