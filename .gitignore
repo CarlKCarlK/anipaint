@@ -131,3 +131,4 @@ dmypy.json
 .work_directory.*
 runs/
 
+scripts/testnp.profile

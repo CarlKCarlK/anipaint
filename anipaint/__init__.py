@@ -1,16 +1,16 @@
 import logging
 import math
 import os
+import shutil
 from pathlib import Path
 
 import matplotlib.pyplot as plt
-from numpy.lib.stride_tricks import as_strided
 import numpy as np
+from numpy.lib.stride_tricks import as_strided
 from PIL import Image
-from scipy.ndimage.filters import gaussian_filter
 from PIL.ImageDraw import Draw
-from pysnptools.util.mapreduce1.runner import LocalMultiThread
 from pysnptools.util.mapreduce1 import map_reduce
+from scipy.ndimage.filters import gaussian_filter
 
 
 def composite(
@@ -65,7 +65,7 @@ def find_edge_distance(matte_path, max_distance=255, threshold=127):
     # print("!!!cmk")
     expanded = grid_nD(gray_array)
     middle = expanded[:, :, 1, 1]
-    logging.info("Finding distances")
+    logging.info(f"Finding distances for '{matte_path.name}'")
     for i in range(1, min(max_distance + 1, 255)):
         minplus1 = np.min(expanded, axis=(-2, -1)) + 1
         next = np.minimum(middle, minplus1)
@@ -160,7 +160,8 @@ def paint(
     credit_range=(1, 256),
     mixing_range=(0, 1),
     outside_penalty=0,
-    keep_threshold=0.5,
+    keep_threshold=0.0,
+    paint_same_threshold=0.0,
     default_angle_degrees=15,
     default_angle_sd=5,
     sprite_factor_range=(1.0, 1.0),  # both inclusive
@@ -172,8 +173,14 @@ def paint(
     if output_folder is not None:
         os.makedirs(output_folder, exist_ok=True)
 
-    def mapper(matte_path):
-        print(matte_path)  # cmk should log
+    matte_path_list = sorted(matte_pattern.parent.glob(matte_pattern.name))
+
+    # !!!cmk could pass list, could only open each file once in find_same
+    skip_list = [diff <= paint_same_threshold for diff in find_same(matte_pattern)]
+
+    def mapper(matte_path_and_skip):
+        matte_path, skip = matte_path_and_skip
+        print(f"painting '{matte_path.name}'")  # cmk should log
 
         if output_folder is not None:
             output_path = (output_folder / matte_path.name).with_suffix(".output.png")
@@ -181,9 +188,12 @@ def paint(
                 print(
                     f"Output already exists, so skipping ('{output_path.name}'')"
                 )  # cmk should log as warn????
-                return
+                return output_path
 
-        im_in = paint_one(
+        if skip:
+            return None
+
+        image = paint_one(
             matte_path,
             brush_pattern,
             random_count=random_count,
@@ -200,16 +210,32 @@ def paint(
             show_work=show_work,
         )
         if output_folder is None:
-            return im_in
+            return image
         else:
-            im_in.save(output_path, optimize=True, compress_level=0)
-            return None
+            image.save(output_path, optimize=True, compress_level=0)
+            return output_path
 
-    return map_reduce(
-        list(matte_pattern.parent.glob(matte_pattern.name)),
-        mapper=mapper,
-        runner=runner,
+    result_w_skip_list = map_reduce(
+        zip(matte_path_list, skip_list), mapper=mapper, runner=runner
     )
+
+    result_list = []
+    previous_noskip_result = None
+    for result_w_skip, matte_path in zip(result_w_skip_list, matte_path_list):
+        if result_w_skip is None:
+            if output_folder is None:
+                result_list.append(previous_noskip_result)
+            else:
+                output_path = (output_folder / matte_path.name).with_suffix(
+                    ".output.png"
+                )  # !!!cmk similar code elsewhere
+                shutil.copy(previous_noskip_result, output_path)
+                result_list.append(output_path)
+        else:
+            previous_noskip_result = result_w_skip
+            result_list.append(previous_noskip_result)
+
+    return result_list
 
 
 def paint_one(
@@ -359,63 +385,51 @@ def paint_one(
     return current_image
 
 
+def pairs(sequence):
+    before = None
+    for item in sequence:
+        yield before, item
+        before = item
+
+
+def find_same(matte_pattern):
+    for before_path, after_path in pairs(
+        sorted(matte_pattern.parent.glob(matte_pattern.name))
+    ):
+        if before_path is None:
+            yield 256.0
+            continue
+        before_array = np.array(Image.open(before_path))
+        after_array = np.array(Image.open(after_path))
+        result = np.abs(before_array - after_array).mean()
+        # print(before_path.name, after_path.name, result)
+        yield result
+
+
 if __name__ == "__main__":
 
     logging.basicConfig(level=logging.INFO)
 
-    shared_datadir = Path(r"D:\OneDrive\programs\anipaint\anipaint\tests\data")
-    tmp_path = Path(r"m:/deldir/anipaint/tests")
+    folder = Path(r"m:\deldir\Watercolor Animation Assets")
 
-    # open a matte
-    matte_file = "Comp 2/ShirtMAtte_00000.jpg"
-    matte_path = shared_datadir / matte_file
+    # result = list(find_same(matte_pattern=folder / "Comp 2/Comp 2/*.jpg"))
 
-    edge_distance = cached_edge_distance(matte_path, shared_datadir / "Comp 2")
+    folder = Path(r"m:\deldir\Watercolor Animation Assets")
+    brush_pattern = folder / "brushes/*.png"
 
-    # edge_distance = find_edge_distance(matte_path, max_distance=10)
-    # directions = find_directions(edge_distance)
-
-    runner = LocalMultiThread(12)
-
-    pre_cache_edge_distance(
-        r"E:\Dropbox\Watercolor Animation Assets\Comp 2\Comp 2\*.*",
-        r"E:\Dropbox\Watercolor Animation Assets\Comp 2\Comp 2\cache",
-        runner=runner,
+    paint(
+        output_folder=folder / "SkinMatte/Comp 2/outputs/run6a_4",
+        matte_pattern=folder / "SkinMatte/Comp 2/Comp 2_0000*.jpg",
+        brush_pattern=folder / "brushes/*.png",
+        random_count=5,
+        outside_penalty=4,
+        keep_threshold=0,
+        candidate_range=(1, 256),
+        credit_range=(1, 256),
+        mixing_range=(255, 256),
+        sprite_factor_range=(0.25, 1),
+        paint_same_threshold=5.0,
+        runner=None,
     )
-
-    brush_file = "brushes/PaintStrokes (0-00-00-04).png"
-    brush_image = Image.open(shared_datadir / brush_file)
-
-    if True:
-        im_in = paint(
-            edge_distance,
-            brush_image,
-            random_count=250,
-            keep_threshold=0.25,
-            candidate_range=(5, 256),
-            credit_range=(1, 256),
-            mixing_range=(20, 75),
-        )
-        # plt.imshow(im_in)
-        # plt.show()
-
-    if True:
-        im_edge = paint(
-            edge_distance,
-            brush_image,
-            random_count=100,
-            keep_threshold=0.1,
-            candidate_range=(10, 11),
-            credit_range=(1, 20),
-            mixing_range=(255, 256),
-        )
-
-    matte_image = Image.open(matte_path)
-    im3 = matte_image.copy()
-    im3.paste(im_in, (0, 0), im_in)
-    im3.paste(im_edge, (0, 0), im_edge)
-
-    plt.imshow(im3)
-    plt.show()
 
     print("!!!cmk")
