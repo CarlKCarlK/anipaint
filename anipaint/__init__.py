@@ -16,7 +16,7 @@ from scipy.ndimage.filters import gaussian_filter
 
 
 def composite(
-    base_image, sprite, x, y, angle_degrees, sprite_factor, draw_debug_line=False
+    base_image, sprite, x, y, angle_degrees, sprite_factor=1, draw_debug_line=False
 ):
     # angle_degrees = math.degrees(angle_radians)-90
     # https://stackoverflow.com/questions/37941648/unable-to-crop-away-transparency-neither-pil-getbbox-nor-numpy-are-working
@@ -125,6 +125,7 @@ class Paint:
     matte_pattern: Any
     brush_pattern: Any
     random_count: int
+    batch_count: int = 1
     candidate_range: Tuple[int] = (1, 256)
     credit_range: Tuple[int] = (1, 256)
     mixing_range: Tuple[int] = (0, 1)
@@ -253,7 +254,7 @@ class Paint:
         matte_image.save(cache_path, optimize=True, compress_level=0)
         return matte_array
 
-    def how_dark(self, image, credit_points, penalty_points):
+    def find_score(self, image, credit_points, penalty_points):
         darkness_array = np.array(image)[:, :, 0:-1].sum(
             axis=-1
         )  # does darkness, not mask
@@ -277,83 +278,85 @@ class Paint:
         penalty_points = edge_distance == 0
         directions = find_directions(edge_distance)
 
-        rng = np.random.RandomState(seed=self.seed)  # random number generator
-
         current_image = Image.new("RGBA", list(edge_distance.shape)[::-1], (0, 0, 0, 0))
 
         old_score = 0
-        for _ in range(self.random_count):
-
+        for outer_index in range(self.random_count):
             candidate_points = np.nonzero(
                 np.where(pre_candidate_points, np.array(current_image)[:, :, 3] == 0, 0)
             )
-
             candidates_len = len(candidate_points[0])
             if candidates_len == 0:
                 break
-            i = rng.choice(candidates_len)
-            x, y = candidate_points[0][i], candidate_points[1][i]
-            v = edge_distance[x, y]
-            fraction_interior = np.clip(
-                (v - self.mixing_range[0])
-                / (self.mixing_range[1] - self.mixing_range[0]),
-                0,
-                1,
-            )
-            dxe, dye = directions[0][x, y], directions[1][x, y]
-            random_angle_degrees = rng.normal(
-                self.default_angle_degrees, self.default_angle_sd
-            )
-            dxi, dyi = (
-                math.cos(math.radians(random_angle_degrees)),
-                math.sin(math.radians(random_angle_degrees)),
-            )
-            dx, dy = (
-                fraction_interior * dxi + (1 - fraction_interior) * dxe,
-                fraction_interior * dyi + (1 - fraction_interior) * dye,
-            )
-            angle_degrees = math.degrees(math.atan2(dy, dx))
 
-            brush_index = rng.choice(len(self.brush_list))
-            brush_image = self.brush_list[brush_index]
-
-            sprite_factor = (
-                math.exp(
-                    rng.uniform(
-                        math.log(self.sprite_factor_range[0] ** 2),
-                        math.log(self.sprite_factor_range[1] ** 2),
-                    )
+            for batch_index in range(self.batch_count):
+                rng = np.random.RandomState(
+                    seed=self.seed ^ (batch_index + outer_index * self.batch_count)
                 )
-                ** 0.5
-                if self.sprite_factor_range[0] < self.sprite_factor_range[1]
-                else self.sprite_factor_range[0]
-            )
-            if sprite_factor != 1:
-                brush_image = brush_image.resize(
-                    (
-                        int(brush_image.width * sprite_factor + 0.5),
-                        int(brush_image.height * sprite_factor + 0.5),
-                    ),
-                    resample=Image.LANCZOS,
+                i = rng.choice(candidates_len)
+                x, y = candidate_points[0][i], candidate_points[1][i]
+                angle_degrees = self.find_angle(x, y, edge_distance, directions, rng)
+                brush_image = self.find_brush(rng)
+
+                possible_image = composite(
+                    current_image, brush_image, y, x, -angle_degrees,
                 )
-            best_improvement = np.array(brush_image)[:, :, 0:-1].sum()
 
-            possible_image = composite(
-                current_image,
-                brush_image,
-                y,
-                x,
-                -angle_degrees,
-                sprite_factor=1,
-                draw_debug_line=False,
-            )
-
-            new_score = self.how_dark(possible_image, credit_points, penalty_points)
-            fraction_new = (int(new_score) - int(old_score)) / best_improvement
-            if fraction_new > self.keep_threshold:
-                old_score = new_score
-                current_image = possible_image
+                new_score = self.find_score(
+                    possible_image, credit_points, penalty_points
+                )
+                best_improvement = np.array(brush_image)[:, :, 0:-1].sum()
+                fraction_new = (int(new_score) - int(old_score)) / best_improvement
+                if fraction_new > self.keep_threshold:
+                    old_score = new_score
+                    current_image = possible_image
         return current_image
+
+    def find_brush(self, rng):
+        brush_image = self.brush_list[rng.choice(len(self.brush_list))]
+
+        sprite_factor = (
+            math.exp(
+                rng.uniform(
+                    math.log(self.sprite_factor_range[0] ** 2),
+                    math.log(self.sprite_factor_range[1] ** 2),
+                )
+            )
+            ** 0.5
+            if self.sprite_factor_range[0] < self.sprite_factor_range[1]
+            else self.sprite_factor_range[0]
+        )
+        if sprite_factor != 1:
+            brush_image = brush_image.resize(
+                (
+                    int(brush_image.width * sprite_factor + 0.5),
+                    int(brush_image.height * sprite_factor + 0.5),
+                ),
+                resample=Image.LANCZOS,
+            )
+        return brush_image
+
+    def find_angle(self, x, y, edge_distance, directions, rng):
+        v = edge_distance[x, y]
+        fraction_interior = np.clip(
+            (v - self.mixing_range[0]) / (self.mixing_range[1] - self.mixing_range[0]),
+            0,
+            1,
+        )
+        dxe, dye = directions[0][x, y], directions[1][x, y]
+        random_angle_degrees = rng.normal(
+            self.default_angle_degrees, self.default_angle_sd
+        )
+        dxi, dyi = (
+            math.cos(math.radians(random_angle_degrees)),
+            math.sin(math.radians(random_angle_degrees)),
+        )
+        dx, dy = (
+            fraction_interior * dxi + (1 - fraction_interior) * dxe,
+            fraction_interior * dyi + (1 - fraction_interior) * dye,
+        )
+        angle_degrees = math.degrees(math.atan2(dy, dx))
+        return angle_degrees
 
 
 def find_skips(sorted_matte_path_list, paint_same_threshold):
