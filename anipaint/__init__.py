@@ -216,7 +216,7 @@ def paint(
             return output_path
 
     result_w_skip_list = map_reduce(
-        zip(matte_path_list, skip_list), mapper=mapper, runner=runner
+        list(zip(matte_path_list, skip_list)), mapper=mapper, runner=runner
     )
 
     result_list = []
@@ -402,7 +402,7 @@ def find_same(matte_pattern):
         before_array = np.array(Image.open(before_path))
         after_array = np.array(Image.open(after_path))
         result = np.abs(before_array - after_array).mean()
-        # print(before_path.name, after_path.name, result)
+        logging.info(f"{before_path.name}, {after_path.name}, {result}")
         yield result
 
 
