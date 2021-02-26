@@ -152,6 +152,67 @@ def grid_nD(arr):
 
 
 def paint(
+    output_folder,  # set to None to return frames instead
+    matte_pattern,
+    brush_pattern,
+    random_count,
+    candidate_range=(1, 256),
+    credit_range=(1, 256),
+    mixing_range=(0, 1),
+    outside_penalty=0,
+    keep_threshold=0.5,
+    default_angle_degrees=15,
+    default_angle_sd=5,
+    sprite_factor_range=(1.0, 1.0),  # both inclusive
+    runner=None,
+    cache_folder=None,
+    seed=231,
+    show_work=False,
+):
+    if output_folder is not None:
+        os.makedirs(output_folder, exist_ok=True)
+
+    def mapper(matte_path):
+        print(matte_path)  # cmk should log
+
+        if output_folder is not None:
+            output_path = (output_folder / matte_path.name).with_suffix(".output.png")
+            if output_path.exists():
+                print(
+                    f"Output already exists, so skipping ('{output_path.name}'')"
+                )  # cmk should log as warn????
+                return
+
+        im_in = paint_one(
+            matte_path,
+            brush_pattern,
+            random_count=random_count,
+            outside_penalty=outside_penalty,
+            keep_threshold=keep_threshold,
+            candidate_range=candidate_range,
+            credit_range=credit_range,
+            mixing_range=mixing_range,
+            sprite_factor_range=sprite_factor_range,
+            default_angle_degrees=default_angle_degrees,
+            default_angle_sd=default_angle_sd,
+            cache_folder=cache_folder,
+            seed=seed,
+            show_work=show_work,
+        )
+        if output_folder is None:
+            return im_in
+        else:
+            im_in.save(output_path, optimize=True, compress_level=0)
+            return None
+
+    return map_reduce(
+        list(matte_pattern.parent.glob(matte_pattern.name)),
+        mapper=mapper,
+        runner=runner,
+    )
+
+
+def paint_one(
     matte_path,
     brush_pattern,
     random_count,
