@@ -189,9 +189,13 @@ def paint(
         ), f"Expect brush_image to be RGBA, not {brush_image.mode}"
         brush_list.append(brush_image)
 
-    candidate_points = np.nonzero(
-        (edge_distance >= candidate_range[0]) * (edge_distance < candidate_range[1])
+    # candidate_points = np.nonzero(
+    #     (edge_distance >= candidate_range[0]) * (edge_distance < candidate_range[1])
+    # )
+    pre_candidate_points = (edge_distance >= candidate_range[0]) * (
+        edge_distance < candidate_range[1]
     )
+
     credit_points = (edge_distance >= credit_range[0]) * (
         edge_distance < credit_range[1]
     )
@@ -208,7 +212,17 @@ def paint(
 
     old_score = 0
     for _ in range(random_count):
-        i = rng.choice(len(candidate_points[1]))
+
+        # !!!cmk np.array slow?
+        candidate_points = np.nonzero(
+            np.where(pre_candidate_points, np.array(current_image)[:, :, 3] == 0, 0)
+        )
+
+        candidates_len = len(candidate_points[0])
+        # print(f"cmk #cp {len(candidate_points[0])}")
+        if candidates_len == 0:
+            break
+        i = rng.choice(candidates_len)
         x, y = candidate_points[0][i], candidate_points[1][i]
         v = edge_distance[x, y]
         fraction_interior = np.clip(
