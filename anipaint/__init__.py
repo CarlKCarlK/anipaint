@@ -122,14 +122,14 @@ class Paint:
     output_folder: Any
     matte_pattern: Any
     brush_pattern: Any
-    random_count: int
+    stroke_count_max: int
     batch_count: int = 1
     candidate_range: Tuple[int] = (1, 256)
     credit_range: Tuple[int] = (1, 256)
     mixing_range: Tuple[int] = (0, 1)
-    outside_penalty: float = 0.0
-    required_brush_efficiency: float = 0.0
-    paint_same_threshold: float = 0.0
+    penalty_area_pixels_max: float = None
+    brush_efficiency_min: float = None
+    frames_diff_fraction_max: float = None
     default_angle_degrees: float = 15
     default_angle_sd: float = 5
     sprite_factor_range: Tuple[float] = (1.0, 1.0)  # both inclusive
@@ -156,7 +156,7 @@ class Paint:
         self.matte_path_list = sorted(
             self.matte_pattern.parent.glob(self.matte_pattern.name)
         )
-        self.skip_list = find_skips(self.matte_path_list, self.paint_same_threshold)
+        self.skip_list = self.find_skips(self.matte_path_list)
 
         brush_pattern = Path(self.brush_pattern)
         self.brush_list = []
@@ -168,6 +168,8 @@ class Paint:
             self.brush_list.append(brush_image)
 
     def paint(self):
+        outer_count = -(-self.stroke_count_max // self.batch_count)  # round up
+
         def mapper(matte_path_and_skip):
             matte_path, skip = matte_path_and_skip
             logging.info(f"painting '{matte_path.name}'")
@@ -183,7 +185,7 @@ class Paint:
             if skip:
                 return None
 
-            image = self.paint_one(matte_path)
+            image = self.paint_one(matte_path, outer_count)
             if self.output_folder is None:
                 return image
             else:
@@ -258,7 +260,7 @@ class Paint:
             np.where(credit_area, image_opacity, 0).sum()
             / 256.0  #!!!similar code elsewhere
         )
-        if self.outside_penalty != 0:
+        if self.penalty_area_pixels_max != 0:
             penalty_area_pixels_covered = (
                 np.where(penalty_area, image_opacity, 0).sum() / 256.0
             )
@@ -266,9 +268,7 @@ class Paint:
             penalty_area_pixels_covered = 0
         return credit_area_pixels_covered, penalty_area_pixels_covered
 
-    def paint_one(
-        self, matte_path,
-    ):
+    def paint_one(self, matte_path, outer_count):
         edge_distance = self.cached_edge_distance(matte_path)
         pre_candidate_points = (edge_distance >= self.candidate_range[0]) * (
             edge_distance < self.candidate_range[1]
@@ -282,7 +282,7 @@ class Paint:
         current_image = Image.new("RGBA", list(edge_distance.shape)[::-1], (0, 0, 0, 0))
 
         old_credit_area_pixels_covered = 0
-        for outer_index in range(self.random_count):
+        for outer_index in range(outer_count):
             candidate_points = np.nonzero(
                 np.where(
                     pre_candidate_points, np.array(current_image)[:, :, -1] == 0, 0
@@ -293,6 +293,18 @@ class Paint:
                 break
 
             def mapper(batch_index):
+                if batch_index == -1:
+                    if self.batch_count == 1:
+                        return old_credit_area_pixels_covered
+                    else:
+                        _old_credit_area_pixels_covered = (
+                            np.where(
+                                credit_area, np.array(current_image)[:, :, -1], 0
+                            ).sum()
+                            / 256.0
+                        )
+                        return _old_credit_area_pixels_covered
+
                 inner_seed = self.seed ^ (batch_index + outer_index * self.batch_count)
                 # print(inner_seed)
                 candidate = self.random_candidate(
@@ -310,23 +322,24 @@ class Paint:
                     old_credit_area_pixels_covered,
                 )
                 print(brush_efficiency)
-                if brush_efficiency > self.required_brush_efficiency:
+                if (
+                    self.brush_efficiency_min is None
+                    or (brush_efficiency >= self.brush_efficiency_min)
+                ) and (
+                    self.penalty_area_pixels_max is None
+                    or (penalty_area_pixels_covered <= self.penalty_area_pixels_max)
+                ):
                     return candidate
                 else:
                     return None
 
-            def reducer(sequence):
-                _current_image = current_image
-                for candidate in sequence:
-                    if candidate is not None:
-                        _current_image = self.create_possible_image(
-                            _current_image, candidate
-                        )
-                return _current_image
-
-            current_image = map_reduce(
-                range(self.batch_count), mapper=mapper, reducer=reducer, runner=None
+            result_list = map_reduce(
+                range(-1, self.batch_count), mapper=mapper, runner=None
             )
+            old_credit_area_pixels_covered = result_list[0]
+            for candidate in result_list[1:]:
+                current_image = self.create_possible_image(current_image, candidate)
+
             current_image.show()  # !!!cmk
             old_credit_area_pixels_covered = (
                 np.where(credit_area, np.array(current_image)[:, :, -1], 0).sum()
@@ -344,7 +357,6 @@ class Paint:
         penalty_area,
         old_credit_area_pixels_covered,
     ):
-        assert self.outside_penalty == 0, "need code"
         possible_image = self.create_possible_image(current_image, candidate)
         new_credit_area_pixels_covered, penalty_area_pixels_covered = self.find_score(
             possible_image, credit_area, penalty_area
@@ -433,24 +445,28 @@ class Paint:
         angle_degrees = math.degrees(math.atan2(dy, dx))
         return angle_degrees
 
+    def find_skips(self, sorted_matte_path_list):
+        skip_list = []
+        before_array = None
+        for after_path in sorted_matte_path_list:
 
-def find_skips(sorted_matte_path_list, paint_same_threshold):
-    skip_list = []
-    before_array = None
-    for after_path in sorted_matte_path_list:
-        after_array = np.array(Image.open(after_path))
-        if before_array is None:
-            diff = 1.0
-        else:
-            diff = np.abs(before_array - after_array).mean() / 256.0
-        skip = diff < paint_same_threshold
-        logging.info(
-            f"'{after_path.name}'', diff from last keep {diff:.3f}, skip? {skip}"
-        )
-        skip_list.append(skip)
-        if not skip:
-            before_array = after_array
-    return skip_list
+            if self.frames_diff_fraction_max is None:
+                skip_list.append(False)
+                continue
+
+            after_array = np.array(Image.open(after_path))
+            if before_array is None:
+                diff = 1.0
+            else:
+                diff = np.abs(before_array - after_array).mean() / 256.0
+            skip = diff < self.frames_diff_fraction_max
+            logging.info(
+                f"'{after_path.name}'', diff from last keep {diff:.3f}, skip? {skip}"
+            )
+            skip_list.append(skip)
+            if not skip:
+                before_array = after_array
+        return skip_list
 
 
 if __name__ == "__main__":
@@ -468,14 +484,14 @@ if __name__ == "__main__":
         output_folder=folder / "SkinMatte/Comp 2/outputs/run_test1",
         matte_pattern=folder / "SkinMatte/Comp 2/Comp 2_0000*.jpg",
         brush_pattern=folder / "brushes/*.png",
-        random_count=5,
-        outside_penalty=4,
-        required_brush_efficiency=0,
+        stroke_count_max=5,
+        penalty_area_pixels_max=4,
+        brush_efficiency_min=0,
         candidate_range=(1, 256),
         credit_range=(1, 256),
         mixing_range=(255, 256),
         sprite_factor_range=(0.25, 1),
-        paint_same_threshold=0.02,  # fraction difference
+        frames_diff_fraction_max=0.02,  # fraction difference
         runner=None,
     ).paint()
 
