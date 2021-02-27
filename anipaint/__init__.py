@@ -289,24 +289,27 @@ class Paint:
             if candidates_len == 0:
                 break
 
+            good_candidate_list = []
+            good_score_list = []
             for batch_index in range(self.batch_count):
-                candidate, brush_image = self.random_candidate(
-                    candidate_points,
-                    edge_distance,
-                    directions,
-                    seed=self.seed ^ (batch_index + outer_index * self.batch_count),
+                inner_seed = self.seed ^ (batch_index + outer_index * self.batch_count)
+                candidate = self.random_candidate(
+                    candidate_points, edge_distance, directions, seed=inner_seed,
                 )
 
                 possible_image = self.create_possible_image(current_image, candidate)
-
                 new_score = self.find_score(
                     possible_image, credit_points, penalty_points
                 )
-                best_improvement = np.array(brush_image)[:, :, 0:-1].sum()
+                best_improvement = np.array(candidate["brush_image"])[:, :, 0:-1].sum()
                 fraction_new = (int(new_score) - int(old_score)) / best_improvement
                 if fraction_new > self.keep_threshold:
-                    old_score = new_score
-                    current_image = possible_image
+                    good_candidate_list.append(candidate)
+                    good_score_list.append(new_score)
+            for candidate in good_candidate_list:
+                current_image = self.create_possible_image(current_image, candidate)
+            new_score = max(good_score_list + [old_score])
+
         return current_image
 
     def create_possible_image(self, current_image, candidate):
@@ -333,7 +336,7 @@ class Paint:
             "y": y,
             "angle_degrees": angle_degrees,
         }
-        return candidate, brush_image
+        return candidate
 
     def find_brush(self, rng):
         brush_image = self.brush_list[rng.choice(len(self.brush_list))]
