@@ -1,12 +1,10 @@
 import logging
 import math
 import os
-import shutil
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Any, Tuple
 
-import matplotlib.pyplot as plt
 import numpy as np
 from numpy.lib.stride_tricks import as_strided
 from PIL import Image
@@ -94,17 +92,17 @@ def find_directions(middle, sigma=7):
     return g0b, g1b
 
 
-def pre_cache_edge_distance(
-    pattern, cache_folder, runner=None, max_distance=255, threshold=127
-):
-    pattern = Path(pattern)
+# cmk def pre_cache_edge_distance(
+#     pattern, cache_folder, runner=None, max_distance=255, threshold=127
+# ):
+#     pattern = Path(pattern)
 
-    def mapper(matte_path):
-        cached_edge_distance(
-            matte_path, cache_folder, max_distance=max_distance, threshold=threshold
-        )
+#     def mapper(matte_path):
+#         cached_edge_distance(
+#             matte_path, cache_folder, max_distance=max_distance, threshold=threshold
+#         )
 
-    map_reduce(list(pattern.parent.glob(pattern.name)), mapper=mapper, runner=runner)
+#     map_reduce(list(pattern.parent.glob(pattern.name)), mapper=mapper, runner=runner)
 
 
 # See http://drsfenner.org/blog/2015/08/game-of-life-in-numpy-2/
@@ -130,7 +128,7 @@ class Paint:
     credit_range: Tuple[int] = (1, 256)
     mixing_range: Tuple[int] = (0, 1)
     outside_penalty: float = 0.0
-    keep_threshold: float = 0.0
+    required_brush_efficiency: float = 0.0
     paint_same_threshold: float = 0.0
     default_angle_degrees: float = 15
     default_angle_sd: float = 5
@@ -254,16 +252,19 @@ class Paint:
         matte_image.save(cache_path, optimize=True, compress_level=0)
         return matte_array
 
-    def find_score(self, image, credit_points, penalty_points):
-        darkness_array = np.array(image)[:, :, 0:-1].sum(
-            axis=-1
-        )  # does darkness, not mask
-        score = np.where(credit_points, darkness_array, 0).sum()
+    def find_score(self, image, credit_area, penalty_area):
+        image_opacity = np.array(image)[:, :, -1]  # opacity of every pixel 0..256
+        credit_area_pixels_covered = (
+            np.where(credit_area, image_opacity, 0).sum()
+            / 256.0  #!!!similar code elsewhere
+        )
         if self.outside_penalty != 0:
-            score -= (
-                np.where(penalty_points, darkness_array, 0).sum() * self.outside_penalty
+            penalty_area_pixels_covered = (
+                np.where(penalty_area, image_opacity, 0).sum() / 256.0
             )
-        return score
+        else:
+            penalty_area_pixels_covered = 0
+        return credit_area_pixels_covered, penalty_area_pixels_covered
 
     def paint_one(
         self, matte_path,
@@ -272,51 +273,92 @@ class Paint:
         pre_candidate_points = (edge_distance >= self.candidate_range[0]) * (
             edge_distance < self.candidate_range[1]
         )
-        credit_points = (edge_distance >= self.credit_range[0]) * (
+        credit_area = (edge_distance >= self.credit_range[0]) * (
             edge_distance < self.credit_range[1]
         )
-        penalty_points = edge_distance == 0
+        penalty_area = edge_distance == 0
         directions = find_directions(edge_distance)
 
         current_image = Image.new("RGBA", list(edge_distance.shape)[::-1], (0, 0, 0, 0))
 
-        old_score = 0
+        old_credit_area_pixels_covered = 0
         for outer_index in range(self.random_count):
             candidate_points = np.nonzero(
-                np.where(pre_candidate_points, np.array(current_image)[:, :, 3] == 0, 0)
+                np.where(
+                    pre_candidate_points, np.array(current_image)[:, :, -1] == 0, 0
+                )
             )
             candidates_len = len(candidate_points[0])
             if candidates_len == 0:
                 break
 
-            good_candidate_list = []
-            good_score_list = []
-            for batch_index in range(self.batch_count):
+            def mapper(batch_index):
                 inner_seed = self.seed ^ (batch_index + outer_index * self.batch_count)
+                # print(inner_seed)
                 candidate = self.random_candidate(
                     candidate_points, edge_distance, directions, seed=inner_seed,
                 )
 
-                fraction_score, new_score = self.find_fraction_score(
-                    current_image, candidate, credit_points, penalty_points, old_score
+                (
+                    brush_efficiency,
+                    penalty_area_pixels_covered,
+                ) = self.find_brush_efficiency(
+                    current_image,
+                    candidate,
+                    credit_area,
+                    penalty_area,
+                    old_credit_area_pixels_covered,
                 )
-                if fraction_score > self.keep_threshold:
-                    good_candidate_list.append(candidate)
-                    good_score_list.append(new_score)
-            for candidate in good_candidate_list:
-                current_image = self.create_possible_image(current_image, candidate)
-            new_score = max(good_score_list + [old_score])
+                print(brush_efficiency)
+                if brush_efficiency > self.required_brush_efficiency:
+                    return candidate
+                else:
+                    return None
+
+            def reducer(sequence):
+                _current_image = current_image
+                for candidate in sequence:
+                    if candidate is not None:
+                        _current_image = self.create_possible_image(
+                            _current_image, candidate
+                        )
+                return _current_image
+
+            current_image = map_reduce(
+                range(self.batch_count), mapper=mapper, reducer=reducer, runner=None
+            )
+            current_image.show()  # !!!cmk
+            old_credit_area_pixels_covered = (
+                np.where(credit_area, np.array(current_image)[:, :, -1], 0).sum()
+                / 256.0
+            )
+            print(old_credit_area_pixels_covered)
 
         return current_image
 
-    def find_fraction_score(
-        self, current_image, candidate, credit_points, penalty_points, old_score
+    def find_brush_efficiency(
+        self,
+        current_image,
+        candidate,
+        credit_area,
+        penalty_area,
+        old_credit_area_pixels_covered,
     ):
+        assert self.outside_penalty == 0, "need code"
         possible_image = self.create_possible_image(current_image, candidate)
-        new_score = self.find_score(possible_image, credit_points, penalty_points)
-        best_improvement = np.array(candidate["brush_image"])[:, :, 0:-1].sum()
-        fraction_new = (int(new_score) - int(old_score)) / best_improvement
-        return fraction_new, new_score
+        new_credit_area_pixels_covered, penalty_area_pixels_covered = self.find_score(
+            possible_image, credit_area, penalty_area
+        )
+        brush_pixels_covered = (
+            np.array(candidate["brush_image"])[:, :, -1]
+        ).sum() / 256.0
+        brush_efficiency = (
+            new_credit_area_pixels_covered - old_credit_area_pixels_covered
+        ) / brush_pixels_covered
+        return (
+            brush_efficiency,
+            penalty_area_pixels_covered,
+        )
 
     def create_possible_image(self, current_image, candidate):
         possible_image = composite(
@@ -333,6 +375,7 @@ class Paint:
         rng = np.random.RandomState(seed=seed)
         candidates_len = len(candidate_points[0])
         i = rng.choice(candidates_len)
+        # print(seed, candidates_len, i)
         x, y = candidate_points[0][i], candidate_points[1][i]
         angle_degrees = self.find_angle(x, y, edge_distance, directions, rng)
         brush_image = self.find_brush(rng)
@@ -427,7 +470,7 @@ if __name__ == "__main__":
         brush_pattern=folder / "brushes/*.png",
         random_count=5,
         outside_penalty=4,
-        keep_threshold=0,
+        required_brush_efficiency=0,
         candidate_range=(1, 256),
         credit_range=(1, 256),
         mixing_range=(255, 256),
