@@ -290,17 +290,14 @@ class Paint:
                 break
 
             for batch_index in range(self.batch_count):
-                rng = np.random.RandomState(
-                    seed=self.seed ^ (batch_index + outer_index * self.batch_count)
+                candidate, brush_image = self.random_candidate(
+                    candidate_points,
+                    edge_distance,
+                    directions,
+                    seed=self.seed ^ (batch_index + outer_index * self.batch_count),
                 )
-                i = rng.choice(candidates_len)
-                x, y = candidate_points[0][i], candidate_points[1][i]
-                angle_degrees = self.find_angle(x, y, edge_distance, directions, rng)
-                brush_image = self.find_brush(rng)
 
-                possible_image = composite(
-                    current_image, brush_image, y, x, -angle_degrees,
-                )
+                possible_image = self.create_possible_image(current_image, candidate)
 
                 new_score = self.find_score(
                     possible_image, credit_points, penalty_points
@@ -311,6 +308,32 @@ class Paint:
                     old_score = new_score
                     current_image = possible_image
         return current_image
+
+    def create_possible_image(self, current_image, candidate):
+        possible_image = composite(
+            current_image,
+            candidate["brush_image"],
+            candidate["y"],
+            candidate["x"],
+            -candidate["angle_degrees"],
+        )
+        return possible_image
+
+    def random_candidate(self, candidate_points, edge_distance, directions, seed):
+
+        rng = np.random.RandomState(seed=seed)
+        candidates_len = len(candidate_points[0])
+        i = rng.choice(candidates_len)
+        x, y = candidate_points[0][i], candidate_points[1][i]
+        angle_degrees = self.find_angle(x, y, edge_distance, directions, rng)
+        brush_image = self.find_brush(rng)
+        candidate = {
+            "brush_image": brush_image,
+            "x": x,
+            "y": y,
+            "angle_degrees": angle_degrees,
+        }
+        return candidate, brush_image
 
     def find_brush(self, rng):
         brush_image = self.brush_list[rng.choice(len(self.brush_list))]
