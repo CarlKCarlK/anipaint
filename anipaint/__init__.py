@@ -297,13 +297,10 @@ class Paint:
                     candidate_points, edge_distance, directions, seed=inner_seed,
                 )
 
-                possible_image = self.create_possible_image(current_image, candidate)
-                new_score = self.find_score(
-                    possible_image, credit_points, penalty_points
+                fraction_score, new_score = self.find_fraction_score(
+                    current_image, candidate, credit_points, penalty_points, old_score
                 )
-                best_improvement = np.array(candidate["brush_image"])[:, :, 0:-1].sum()
-                fraction_new = (int(new_score) - int(old_score)) / best_improvement
-                if fraction_new > self.keep_threshold:
+                if fraction_score > self.keep_threshold:
                     good_candidate_list.append(candidate)
                     good_score_list.append(new_score)
             for candidate in good_candidate_list:
@@ -311,6 +308,15 @@ class Paint:
             new_score = max(good_score_list + [old_score])
 
         return current_image
+
+    def find_fraction_score(
+        self, current_image, candidate, credit_points, penalty_points, old_score
+    ):
+        possible_image = self.create_possible_image(current_image, candidate)
+        new_score = self.find_score(possible_image, credit_points, penalty_points)
+        best_improvement = np.array(candidate["brush_image"])[:, :, 0:-1].sum()
+        fraction_new = (int(new_score) - int(old_score)) / best_improvement
+        return fraction_new, new_score
 
     def create_possible_image(self, current_image, candidate):
         possible_image = composite(
