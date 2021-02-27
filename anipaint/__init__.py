@@ -1,8 +1,9 @@
 import logging
 import math
 import os
-from pathlib import Path
+import shutil
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Tuple
 
 import numpy as np
@@ -210,6 +211,7 @@ class Paint:
                     result_list.append(previous_noskip_result)
                 else:
                     output_path = self.create_output_path(matte_path)
+                    shutil.copy(previous_noskip_result, output_path)
                     result_list.append(output_path)
             else:
                 previous_noskip_result = result_w_skip
