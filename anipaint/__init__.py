@@ -133,7 +133,8 @@ class Paint:
     default_angle_degrees: float = 15
     default_angle_sd: float = 5
     sprite_factor_range: Tuple[float] = (1.0, 1.0)  # both inclusive
-    runner: Any = None
+    frame_runner: Any = None
+    batch_runner: Any = None
     cache_folder: Any = None
     seed: int = 231
 
@@ -161,7 +162,7 @@ class Paint:
         brush_pattern = Path(self.brush_pattern)
         self.brush_list = []
         for brush_path in brush_pattern.parent.glob(brush_pattern.name):
-            brush_image = Image.open(brush_path)
+            brush_image = Image.open(brush_path).copy()
             assert (
                 brush_image.mode == "RGBA"
             ), f"Expect brush_image to be RGBA, not {brush_image.mode}"
@@ -195,7 +196,7 @@ class Paint:
         result_w_skip_list = map_reduce(
             list(zip(self.matte_path_list, self.skip_list)),
             mapper=mapper,
-            runner=self.runner,
+            runner=self.frame_runner,
         )
         result_list = self.fill_skips(result_w_skip_list)
         return result_list
@@ -334,17 +335,13 @@ class Paint:
                     return None
 
             result_list = map_reduce(
-                range(-1, self.batch_count), mapper=mapper, runner=None
+                range(-1, self.batch_count), mapper=mapper, runner=self.batch_runner
             )
             old_credit_area_pixels_covered = result_list[0]
             for candidate in result_list[1:]:
                 current_image = self.create_possible_image(current_image, candidate)
 
             current_image.show()  # !!!cmk
-            old_credit_area_pixels_covered = (
-                np.where(credit_area, np.array(current_image)[:, :, -1], 0).sum()
-                / 256.0
-            )
             print(old_credit_area_pixels_covered)
 
         return current_image
@@ -492,7 +489,7 @@ if __name__ == "__main__":
         mixing_range=(255, 256),
         sprite_factor_range=(0.25, 1),
         frames_diff_fraction_max=0.02,  # fraction difference
-        runner=None,
+        frame_runner=None,
     ).paint()
 
     print("!!!cmk")
