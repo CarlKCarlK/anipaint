@@ -27,5 +27,5 @@ Paint(
     mixing_range=(255, 256),
     sprite_factor_range=(0.25, 1),
     frame_runner=frame_runner,
-    batch_runner=batch_runner,
+    preview_runner=batch_runner,
 ).paint()[0].show()

@@ -124,6 +124,7 @@ class Paint:
     matte_pattern: Any
     brush_pattern: Any
     stroke_count_max: int
+    preview_frame: int = None
     batch_count: int = 1
     candidate_range: Tuple[int] = (1, 256)
     credit_range: Tuple[int] = (1, 256)
@@ -135,7 +136,7 @@ class Paint:
     default_angle_sd: float = 5
     sprite_factor_range: Tuple[float] = (1.0, 1.0)  # both inclusive
     frame_runner: Any = None
-    batch_runner: Any = None
+    preview_runner: Any = None
     cache_folder: Any = None
     seed: int = 231
 
@@ -153,12 +154,19 @@ class Paint:
             0 < self.sprite_factor_range[0] <= self.sprite_factor_range[1]
         ), "first value of sprite_factor_range must be more than 0 and less than or equal to the 2nd"
 
-        if self.output_folder is not None:
+        if self.preview_frame is None:
             os.makedirs(self.output_folder, exist_ok=True)
         self.matte_path_list = sorted(
             self.matte_pattern.parent.glob(self.matte_pattern.name)
         )
         self.skip_list = self.find_skips(self.matte_path_list)
+
+        if self.preview_frame is not None:
+            self.matte_path_list = [self.matte_path_list[self.preview_frame]]
+            self.skip_list = [False]
+            self.frame_runner = None
+        else:
+            self.preview_runner = None
 
         brush_pattern = Path(self.brush_pattern)
         self.brush_list = []
@@ -176,7 +184,7 @@ class Paint:
             matte_path, skip = matte_path_and_skip
             logging.info(f"painting '{matte_path.name}'")
 
-            if self.output_folder is not None:
+            if self.preview_frame is None:
                 output_path = self.create_output_path(matte_path)
                 if output_path.exists():
                     logging.warn(
@@ -188,7 +196,7 @@ class Paint:
                 return None
 
             image = self.paint_one(matte_path, outer_count)
-            if self.output_folder is None:
+            if self.preview_frame is not None:
                 return image
             else:
                 image.save(output_path, optimize=True, compress_level=0)
@@ -200,14 +208,15 @@ class Paint:
             runner=self.frame_runner,
         )
         result_list = self.fill_skips(result_w_skip_list)
-        return result_list
+        if self.preview_frame is not None:
+            result_list[0].show()
 
     def fill_skips(self, result_w_skip_list):
         result_list = []
         previous_noskip_result = None
         for result_w_skip, matte_path in zip(result_w_skip_list, self.matte_path_list):
             if result_w_skip is None:
-                if self.output_folder is None:
+                if self.preview_frame is not None:
                     result_list.append(previous_noskip_result)
                 else:
                     output_path = self.create_output_path(matte_path)
@@ -358,7 +367,7 @@ class Paint:
                     return None
 
             result_list = map_reduce(
-                range(self.batch_count), mapper=mapper, runner=self.batch_runner
+                range(self.batch_count), mapper=mapper, runner=self.preview_runner
             )
             for candidate in result_list:
                 if candidate is not None:
