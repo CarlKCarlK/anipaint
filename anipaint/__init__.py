@@ -255,18 +255,29 @@ class Paint:
         matte_image.save(cache_path, optimize=True, compress_level=0)
         return matte_array
 
-    def find_score(self, image, credit_area, penalty_area):
+    def find_score(self, current_image, candidate, credit_area, penalty_area):
+        if self.brush_efficiency_min is None and self.penalty_area_pixels_max is None:
+            return 0, 0
+
+        image = self.create_possible_image(current_image, candidate)
         image_opacity = np.array(image)[:, :, -1]  # opacity of every pixel 0..256
-        credit_area_pixels_covered = (
-            np.where(credit_area, image_opacity, 0).sum()
-            / 256.0  #!!!similar code elsewhere
-        )
-        if self.penalty_area_pixels_max != 0:
+        # !!!cmk similar code elsewhere
+
+        if self.brush_efficiency_min is not None:
+            credit_area_pixels_covered = (
+                np.where(credit_area, image_opacity, 0).sum() / 256.0
+            )
+        else:
+            credit_area_pixels_covered = 0
+
+        # !!!cmk similar code elsewhere
+        if self.penalty_area_pixels_max is not None:
             penalty_area_pixels_covered = (
                 np.where(penalty_area, image_opacity, 0).sum() / 256.0
             )
         else:
             penalty_area_pixels_covered = 0
+
         return credit_area_pixels_covered, penalty_area_pixels_covered
 
     def paint_one(self, matte_path, outer_count):
@@ -282,29 +293,32 @@ class Paint:
 
         current_image = Image.new("RGBA", list(edge_distance.shape)[::-1], (0, 0, 0, 0))
 
-        old_credit_area_pixels_covered = 0
         for outer_index in range(outer_count):
+
+            image_opacity = np.array(current_image)[:, :, -1]
+
             candidate_points = np.nonzero(
-                np.where(
-                    pre_candidate_points, np.array(current_image)[:, :, -1] == 0, 0
-                )
+                np.where(pre_candidate_points, image_opacity == 0, 0)
             )
             candidates_len = len(candidate_points[0])
             if candidates_len == 0:
                 break
 
+            if self.brush_efficiency_min is not None:
+                old_credit_area_pixels_covered = (
+                    np.where(credit_area, image_opacity, 0).sum() / 256.0
+                )
+            else:
+                old_credit_area_pixels_covered = 0
+
+            if self.penalty_area_pixels_max is not None:
+                old_penalty_area_pixels_covered = (
+                    np.where(penalty_area, image_opacity, 0).sum() / 256.0
+                )
+            else:
+                old_penalty_area_pixels_covered = 0
+
             def mapper(batch_index):
-                if batch_index == -1:
-                    if self.batch_count == 1:
-                        return old_credit_area_pixels_covered
-                    else:
-                        _old_credit_area_pixels_covered = (
-                            np.where(
-                                credit_area, np.array(current_image)[:, :, -1], 0
-                            ).sum()
-                            / 256.0
-                        )
-                        return _old_credit_area_pixels_covered
 
                 inner_seed = self.seed ^ (batch_index + outer_index * self.batch_count)
                 # print(inner_seed)
@@ -314,7 +328,7 @@ class Paint:
 
                 (
                     brush_efficiency,
-                    penalty_area_pixels_covered,
+                    new_penalty_area_pixels_covered,
                 ) = self.find_brush_efficiency(
                     current_image,
                     candidate,
@@ -322,27 +336,34 @@ class Paint:
                     penalty_area,
                     old_credit_area_pixels_covered,
                 )
-                print(brush_efficiency)
+                # print(brush_efficiency)
                 if (
                     self.brush_efficiency_min is None
                     or (brush_efficiency >= self.brush_efficiency_min)
                 ) and (
                     self.penalty_area_pixels_max is None
-                    or (penalty_area_pixels_covered <= self.penalty_area_pixels_max)
+                    or (
+                        (
+                            new_penalty_area_pixels_covered
+                            - old_penalty_area_pixels_covered
+                        )
+                        <= self.penalty_area_pixels_max
+                    )
                 ):
                     return candidate
                 else:
+                    # print(penalty_area_pixels_covered)
                     return None
 
             result_list = map_reduce(
-                range(-1, self.batch_count), mapper=mapper, runner=self.batch_runner
+                range(self.batch_count), mapper=mapper, runner=self.batch_runner
             )
-            old_credit_area_pixels_covered = result_list[0]
-            for candidate in result_list[1:]:
-                current_image = self.create_possible_image(current_image, candidate)
+            for candidate in result_list:
+                if candidate is not None:
+                    current_image = self.create_possible_image(current_image, candidate)
 
-            current_image.show()  # !!!cmk
-            print(old_credit_area_pixels_covered)
+            # current_image.show()  # !!!cmk
+            # print(old_credit_area_pixels_covered)
 
         return current_image
 
@@ -354,16 +375,19 @@ class Paint:
         penalty_area,
         old_credit_area_pixels_covered,
     ):
-        possible_image = self.create_possible_image(current_image, candidate)
         new_credit_area_pixels_covered, penalty_area_pixels_covered = self.find_score(
-            possible_image, credit_area, penalty_area
+            current_image, candidate, credit_area, penalty_area
         )
-        brush_pixels_covered = (
-            np.array(candidate["brush_image"])[:, :, -1]
-        ).sum() / 256.0
-        brush_efficiency = (
-            new_credit_area_pixels_covered - old_credit_area_pixels_covered
-        ) / brush_pixels_covered
+
+        if self.brush_efficiency_min is not None:
+            brush_pixels_covered = (
+                np.array(candidate["brush_image"])[:, :, -1]
+            ).sum() / 256.0
+            brush_efficiency = (
+                new_credit_area_pixels_covered - old_credit_area_pixels_covered
+            ) / brush_pixels_covered
+        else:
+            brush_efficiency = 1.0
         return (
             brush_efficiency,
             penalty_area_pixels_covered,
@@ -380,7 +404,7 @@ class Paint:
         return possible_image
 
     def random_candidate(self, candidate_points, edge_distance, directions, seed):
-
+        # print(seed)
         rng = np.random.RandomState(seed=seed)
         candidates_len = len(candidate_points[0])
         i = rng.choice(candidates_len)

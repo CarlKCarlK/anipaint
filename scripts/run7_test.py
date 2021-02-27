@@ -19,9 +19,9 @@ Paint(
     matte_pattern=folder / "SkinMatte/Comp 2/Comp 2_00000.jpg",
     brush_pattern=folder / "brushes/*.png",
     stroke_count_max=500,
-    batch_count=10,
-    penalty_area_pixels_max=None,
-    brush_efficiency_min=None,  # CMK when this is NONE can we go faster?
+    batch_count=50,
+    penalty_area_pixels_max=10,
+    brush_efficiency_min=None,
     candidate_range=(1, 256),
     credit_range=(1, 256),
     mixing_range=(255, 256),
