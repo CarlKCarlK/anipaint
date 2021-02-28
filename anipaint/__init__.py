@@ -505,7 +505,7 @@ class Paint:
                 skip_list.append(False)
                 continue
 
-            after_array = np.array(Image.open(after_path))
+            after_array = np.array(Image.open(after_path), "int16")
             if reference_array is None:
                 diff = 1.0
             else:
@@ -517,7 +517,7 @@ class Paint:
             skip = diff < self.frames_diff_fraction_max
             skip_list.append(skip)
             logging.info(
-                f"'{after_path.name}', diff from ref&previous {diff:.10f}, skip? {skip}"
+                f"'{after_path.name}', diff from ref&previous {diff:.6f}, skip? {skip}"
             )
             previous_array = after_array
             if not skip:

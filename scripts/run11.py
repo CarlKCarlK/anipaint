@@ -10,12 +10,13 @@ logging.basicConfig(level=logging.INFO)
 
 # We set top_folder to the location of assets
 if os.environ.get("COMPUTERNAME") != "KADIE2":
+    # Ben's computer
     processor_count = 20
     top_folder = Path(r"D:\STRANDING NEW\AnapaintAssets")
     brush_pattern = top_folder / "Brushes 1/*.png"
     frame_runner = LocalMultiProc(processor_count)
     preview_runner = LocalMultiThread(processor_count)
-else:
+else:  # Carl's computer
     processor_count = 12
     top_folder = Path(r"M:\deldir\Watercolor Animation Assets")
     brush_pattern = top_folder / "BRUSHES/*.png"
@@ -40,7 +41,7 @@ Paint(
     credit_range=(1, 256),
     mixing_range=(255, 256),
     sprite_factor_range=(0.1, 0.4),
-    frames_diff_fraction_max=0.00001,
+    frames_diff_fraction_max=0.0000001,
     frame_runner=frame_runner,
     preview_runner=preview_runner,
 ).paint()
