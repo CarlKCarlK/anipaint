@@ -29,7 +29,7 @@ See scripts/sample.py
 
 Notes:
 * Python is very picky about using spaces (not tabs)
-* Python is very picky about columnns lining up
+* Python is very picky about columns lining up
 * It will not render an output that is already there
     * So, to get a fresh render, delete the output and aim it out new output folder.
 * "top_folder" is just a convenience.
@@ -42,7 +42,7 @@ Notes:
   put the updated mattes in a new folder.
 * You can put more than one "Paint(...).paint()" command in a script
   to render multiple folders of matte files. (Could also write simple
-  Python loop to run on mutiple matte folders.)
+  Python loop to run on multiple matte folders.)
 
 Parameters:
 

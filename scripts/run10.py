@@ -12,17 +12,18 @@ logging.basicConfig(level=logging.INFO)
 frame_runner = LocalMultiProc(10)
 preview_runner = LocalMultiThread(10)
 
-folder = Path(r"E:\Dropbox\Watercolor Animation Assets")
-brush_pattern = folder / "brushes/*.png"
+top_folder = Path(r"E:\Dropbox\Watercolor Animation Assets")
+brush_pattern = top_folder / "brushes/*.png"
 
-preview_frame = None  # 1  # None #starting at 0
+preview_frame = 0  # 1  # None #starting at 0
 
 Paint(
     preview_frame=preview_frame,
-    output_folder=folder / "SkinMatte/Comp 2/outputs/run10",
-    matte_pattern=folder / "SkinMatte/Comp 2/*.*",
+    output_folder=top_folder / "SkinMatte/Comp 2/outputs/run10",
+    matte_pattern=top_folder / "SkinMatte/Comp 2/*.*",
+    background_pattern=top_folder / "BG textures/*.*",
     brush_pattern=brush_pattern,
-    stroke_count_max=500,
+    stroke_count_max=50,
     batch_count=50,
     penalty_area_pixels_max=30,
     brush_efficiency_min=None,

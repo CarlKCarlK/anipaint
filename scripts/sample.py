@@ -21,16 +21,17 @@ brush_pattern = top_folder / "brushes/*.png"
 
 # Set to None to render all frames. Set to 0 to preview 1st frame
 # set to 10 to preview 11th frame.
-preview_frame = None  # 0
+preview_frame = 0  # 0
 
 Paint(
     preview_frame=preview_frame,
     output_folder=top_folder / "SkinMatte/Comp 2/outputs/run10",
     matte_pattern=top_folder / "SkinMatte/Comp 2/*.*",
+    background_pattern=top_folder / "BG textures/*.*",
     brush_pattern=brush_pattern,
     stroke_count_max=500,
     batch_count=50,
-    penalty_area_pixels_max=30,
+    penalty_area_pixels_max=100,
     brush_efficiency_min=None,
     candidate_range=(1, 256),
     credit_range=(1, 256),

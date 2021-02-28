@@ -126,6 +126,7 @@ class Paint:
     stroke_count_max: int
     preview_frame: int = None
     batch_count: int = 1
+    background_pattern: Any = None
     candidate_range: Tuple[int] = (1, 256)
     credit_range: Tuple[int] = (1, 256)
     mixing_range: Tuple[int] = (0, 1)
@@ -168,21 +169,30 @@ class Paint:
         else:
             self.preview_runner = None
 
-        brush_pattern = Path(self.brush_pattern)
-        self.brush_list = []
+        self.brush_list = self.load_images(self.brush_pattern)
+        self.background_list = (
+            self.load_images(self.background_pattern)
+            if self.background_pattern is not None
+            else None
+        )
+
+    def load_images(self, pattern):
+        result_list = []
+        brush_pattern = Path(pattern)
         for brush_path in brush_pattern.parent.glob(brush_pattern.name):
             brush_image = Image.open(brush_path).copy()
             assert (
                 brush_image.mode == "RGBA"
             ), f"Expect brush_image to be RGBA, not {brush_image.mode}"
-            self.brush_list.append(brush_image)
+            result_list.append(brush_image)
+        return result_list
 
     def paint(self):
         outer_count = -(-self.stroke_count_max // self.batch_count)  # round up
 
         def mapper(matte_path_and_skip):
             matte_path, skip = matte_path_and_skip
-            logging.info(f"painting '{matte_path.name}'")
+            logging.info(f"painting '{matte_path.name}' (skip? {skip}) ")
 
             if self.preview_frame is None:
                 output_path = self.create_output_path(matte_path)
@@ -376,6 +386,14 @@ class Paint:
             # current_image.show()  # !!!cmk
             # print(old_credit_area_pixels_covered)
 
+        if self.background_list is not None:
+            matte_image = Image.open(matte_path)
+            rng = np.random.RandomState(seed=self.seed)
+            background = self.background_list[
+                rng.choice(len(self.background_list))
+            ].copy()
+            background.paste(current_image, (0, 0), matte_image.convert("RGBA"))
+            current_image = background
         return current_image
 
     def find_brush_efficiency(
@@ -479,7 +497,8 @@ class Paint:
 
     def find_skips(self, sorted_matte_path_list):
         skip_list = []
-        before_array = None
+        reference_array = None
+        previous_array = None
         for after_path in sorted_matte_path_list:
 
             if self.frames_diff_fraction_max is None:
@@ -487,17 +506,22 @@ class Paint:
                 continue
 
             after_array = np.array(Image.open(after_path))
-            if before_array is None:
+            if reference_array is None:
                 diff = 1.0
             else:
-                diff = np.abs(before_array - after_array).mean() / 256.0
+                diff = np.abs(reference_array - after_array).mean() / 256.0
+                if reference_array is not previous_array:
+                    diff = max(
+                        diff, np.abs(previous_array - after_array).mean() / 256.0
+                    )
             skip = diff < self.frames_diff_fraction_max
-            logging.info(
-                f"'{after_path.name}'', diff from last keep {diff:.3f}, skip? {skip}"
-            )
             skip_list.append(skip)
+            logging.info(
+                f"'{after_path.name}', diff from ref&previous {diff:.10f}, skip? {skip}"
+            )
+            previous_array = after_array
             if not skip:
-                before_array = after_array
+                reference_array = after_array
         return skip_list
 
 
