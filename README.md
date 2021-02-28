@@ -40,6 +40,9 @@ Notes:
 * A folder of cached of edge distances will be placed under the matte
   folder. To get fresh edge distances, delete the cache folder or
   put the updated mattes in a new folder.
+* You can put more than one "Paint(...).paint()" command in a script
+  to render multiple folders of matte files. (Could also write simple
+  Python loop to run on mutiple matte folders.)
 
 Parameters:
 
@@ -86,6 +89,3 @@ Parameters:
     under the matte folder called "cache"
 *   seed = 231
      * A number that controls the randomness.
-    
-
-
