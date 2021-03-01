@@ -178,13 +178,13 @@ class Paint:
 
     def load_images(self, pattern):
         result_list = []
-        brush_pattern = Path(pattern)
-        for brush_path in brush_pattern.parent.glob(brush_pattern.name):
-            brush_image = Image.open(brush_path).copy()
-            assert (
-                brush_image.mode == "RGBA"
-            ), f"Expect brush_image to be RGBA, not {brush_image.mode}"
-            result_list.append(brush_image)
+        pattern = Path(pattern)
+        for path in pattern.parent.glob(pattern.name):
+            image = Image.open(path).copy()
+            assert image.mode == "RGBA", f"Expect image to be RGBA, not {image.mode}"
+            result_list.append(image)
+        logging.info(f"Loaded {len(result_list)} image(s) from '{pattern}'")
+        assert len(result_list) > 0, f"Expect at least one image from '{pattern}'"
         return result_list
 
     def paint(self):
