@@ -46,7 +46,7 @@ def composite(
     rot = rot.crop(rot.getbbox())
     x1 = int(x - rot.width / 2)
     y1 = int(y - rot.height / 2)
-    result.paste(rot, (x1, y1), mask=rot)
+    result.alpha_composite(rot, dest=(x1, y1))
 
     return result
 
@@ -387,12 +387,12 @@ class Paint:
             # print(old_credit_area_pixels_covered)
 
         if self.background_list is not None:
-            matte_image = Image.open(matte_path)
+            # matte_image = Image.open(matte_path)
             rng = np.random.RandomState(seed=self.seed)
             background = self.background_list[
                 rng.choice(len(self.background_list))
             ].copy()
-            background.paste(current_image, (0, 0), matte_image.convert("RGBA"))
+            background.alpha_composite(current_image, dest=(0, 0))
             current_image = background
         return current_image
 
