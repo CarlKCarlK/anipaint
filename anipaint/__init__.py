@@ -66,9 +66,6 @@ def find_edge_distance(matte_path, max_distance=255, threshold=127):
     gray_array[1:-1, 1:-1] = np.where(
         rgb_array.mean(axis=2) < threshold, 0, 254
     )  # 254 to give room for +1
-    # plt.imshow(gray_array)
-    # plt.show()
-    # print("!!!cmk")
     expanded = grid_nD(gray_array)
     middle = expanded[:, :, 1, 1]
     logging.info(f"Finding distances for '{matte_path.name}'")
@@ -79,9 +76,6 @@ def find_edge_distance(matte_path, max_distance=255, threshold=127):
         # logging.info(f"distance {i}")
         if middle.max() < 254:
             break
-    # plt.imshow(np.where(middle == 0, 256, middle), cmap="twilight", vmin=0, vmax=255)
-    # plt.show()
-    # print("!!!cmk")
     return middle
 
 
@@ -196,8 +190,8 @@ class Paint:
     def paint(self):
         outer_count = -(-self.stroke_count_max // self.batch_count)  # round up
 
-        def mapper(matte_path_and_skip):
-            matte_path, skip = matte_path_and_skip
+        def mapper(frame_index_and_matte_path_and_skip):
+            frame_index, (matte_path, skip) = frame_index_and_matte_path_and_skip
             logging.info(f"painting '{matte_path.name}' (skip? {skip}) ")
 
             if self.preview_frame is None:
@@ -211,7 +205,7 @@ class Paint:
             if skip:
                 return None
 
-            image = self.paint_one(matte_path, outer_count)
+            image = self.paint_one(matte_path, outer_count, frame_index)
             if self.preview_frame is not None:
                 return image
             else:
@@ -219,7 +213,7 @@ class Paint:
                 return output_path
 
         result_w_skip_list = map_reduce(
-            list(zip(self.matte_path_list, self.skip_list)),
+            list(enumerate(zip(self.matte_path_list, self.skip_list))),
             mapper=mapper,
             runner=self.frame_runner,
         )
@@ -307,7 +301,7 @@ class Paint:
 
         return credit_area_pixels_covered, penalty_area_pixels_covered
 
-    def paint_one(self, matte_path, outer_count):
+    def paint_one(self, matte_path, outer_count, frame_index):
         edge_distance = self.cached_edge_distance(matte_path)
         pre_candidate_points = (edge_distance >= self.candidate_range[0]) * (
             edge_distance < self.candidate_range[1]
@@ -347,8 +341,11 @@ class Paint:
 
             def mapper(batch_index):
 
-                inner_seed = self.seed ^ (batch_index + outer_index * self.batch_count)
-                # print(inner_seed)
+                inner_seed = self.seed ^ (
+                    batch_index
+                    + self.batch_count * (outer_index + outer_count * frame_index)
+                )
+                # print(f"inner_seed {inner_seed}")
                 candidate = self.random_candidate(
                     candidate_points, edge_distance, directions, seed=inner_seed,
                 )
@@ -363,7 +360,6 @@ class Paint:
                     penalty_area,
                     old_credit_area_pixels_covered,
                 )
-                # print(brush_efficiency)
                 if (
                     self.brush_efficiency_min is None
                     or (brush_efficiency >= self.brush_efficiency_min)
@@ -379,7 +375,6 @@ class Paint:
                 ):
                     return candidate
                 else:
-                    # print(penalty_area_pixels_covered)
                     return None
 
             result_list = map_reduce(
@@ -389,16 +384,15 @@ class Paint:
                 if candidate is not None:
                     current_image = self.create_possible_image(current_image, candidate)
 
-            # current_image.show()  # !!!cmk
-            # print(old_credit_area_pixels_covered)
-
         if self.background_list is not None:
             matte_image = Image.open(matte_path)
             if self.background_matte_blur is not None:
                 matte_image = matte_image.filter(
                     ImageFilter.GaussianBlur(self.background_matte_blur)
                 )
-            rng = np.random.RandomState(seed=self.seed)
+            frame_seed = self.seed ^ frame_index
+            # print(f"frame_seed {frame_seed}")
+            rng = np.random.RandomState(seed=frame_seed)
             background = self.background_list[rng.choice(len(self.background_list))]
             result = Image.new("RGBA", background.size, (0, 0, 0, 0))
             result.paste(background, mask=ImageOps.grayscale(matte_image))

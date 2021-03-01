@@ -15,7 +15,7 @@ preview_runner = LocalMultiThread(10)
 top_folder = Path(r"E:\Dropbox\Watercolor Animation Assets")
 brush_pattern = top_folder / "brushes/*.png"
 
-preview_frame = 0  # 1  # None #starting at 0
+preview_frame = None  # 0  # 1  # None #starting at 0
 
 Paint(
     preview_frame=preview_frame,
@@ -25,7 +25,7 @@ Paint(
     background_matte_blur=3,
     brush_pattern=brush_pattern,
     stroke_count_max=50,
-    batch_count=50,
+    batch_count=500,
     penalty_area_pixels_max=30,
     brush_efficiency_min=None,
     candidate_range=(1, 256),
