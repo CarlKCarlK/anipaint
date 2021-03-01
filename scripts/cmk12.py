@@ -33,7 +33,7 @@ preview_frame = None
 
 Paint(
     preview_frame=preview_frame,
-    output_folder=top_folder / "SkinMatte/Comp 2/outputs/cmk12blur",
+    output_folder=top_folder / "SkinMatte/Comp 2/outputs/cmk12.2",
     matte_pattern=top_folder / "SkinMatte/Comp 2/*.*",
     brush_pattern=brush_pattern,
     background_pattern=top_folder / "BG textures/*.*",

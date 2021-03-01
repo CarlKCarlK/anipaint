@@ -33,13 +33,17 @@ Notes:
 * It will not render an output that is already there
     * So, to get a fresh render, delete the output and aim it out new output folder.
 * "top_folder" is just a convenience.
-* File paths can use "/" or "\\", but if they use "\\" the string must start with an "r"
+* File paths can use "/" or "\\", but if they use "\\" the string must
+  start with an "r"
     * For example, r"E:\Dropbox\Watercolor Animation Assets")
 * Use "preview_frame" to turn on/off preview vs save to file.
 * It tries to center each stroke on an empty pixel
 * A folder of cached of edge distances will be placed under the matte
   folder. To get fresh edge distances, delete the cache folder or
   put the updated mattes in a new folder.
+* The cache folder also contains a text file containing the 
+  differences between pairs of files. For example, with name
+  "Comp 2_00000.Comp 2_00141.diff_list.txt"
 * You can put more than one "Paint(...).paint()" command in a script
   to render multiple folders of matte files. (Could also write simple
   Python loop to run on multiple matte folders.)

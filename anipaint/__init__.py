@@ -155,12 +155,18 @@ class Paint:
             0 < self.sprite_factor_range[0] <= self.sprite_factor_range[1]
         ), "first value of sprite_factor_range must be more than 0 and less than or equal to the 2nd"
 
+        self.matte_pattern = Path(self.matte_pattern)
+        if self.cache_folder is not None:
+            self.cache_folder = Path(self.cache_folder)
+        else:
+            self.cache_folder = self.matte_pattern.parent / "cache"
+
         if self.preview_frame is None:
             os.makedirs(self.output_folder, exist_ok=True)
         self.matte_path_list = sorted(
             self.matte_pattern.parent.glob(self.matte_pattern.name)
         )
-        self.skip_list = self.find_skips(self.matte_path_list)
+        self.skip_list = self._find_skips(self.matte_path_list)
 
         if self.preview_frame is not None:
             self.matte_path_list = [self.matte_path_list[self.preview_frame]]
@@ -197,7 +203,7 @@ class Paint:
             if self.preview_frame is None:
                 output_path = self.create_output_path(matte_path)
                 if output_path.exists():
-                    logging.warn(
+                    logging.warning(
                         f"Output already exists, so skipping ('{output_path.name}'')"
                     )
                     return output_path
@@ -223,18 +229,18 @@ class Paint:
 
     def fill_skips(self, result_w_skip_list):
         result_list = []
-        previous_noskip_result = None
+        before_noskip_result = None
         for result_w_skip, matte_path in zip(result_w_skip_list, self.matte_path_list):
             if result_w_skip is None:
                 if self.preview_frame is not None:
-                    result_list.append(previous_noskip_result)
+                    result_list.append(before_noskip_result)
                 else:
                     output_path = self.create_output_path(matte_path)
-                    shutil.copy(previous_noskip_result, output_path)
+                    shutil.copy(before_noskip_result, output_path)
                     result_list.append(output_path)
             else:
-                previous_noskip_result = result_w_skip
-                result_list.append(previous_noskip_result)
+                before_noskip_result = result_w_skip
+                result_list.append(before_noskip_result)
         return result_list
 
     def create_output_path(self, matte_path):
@@ -244,15 +250,8 @@ class Paint:
     def cached_edge_distance(self, matte_path):
         max_distance = 255
         threshold = 127
-        if ".edge_distance" in matte_path.name:
-            return
 
-        if self.cache_folder is not None:
-            cache_folder2 = Path(self.cache_folder)
-        else:
-            cache_folder2 = matte_path.parent / "cache"
-
-        cache_path = (cache_folder2 / matte_path.name).with_suffix(
+        cache_path = (self.cache_folder / matte_path.name).with_suffix(
             ".edge_distance{0}{1}.png".format(
                 "" if max_distance == 255 else f".md{max_distance}",
                 "" if threshold == 127 else f".th{threshold}",
@@ -499,33 +498,72 @@ class Paint:
         angle_degrees = math.degrees(math.atan2(dy, dx))
         return angle_degrees
 
-    def find_skips(self, sorted_matte_path_list):
+    def _find_skips(self, sorted_matte_path_list):
+
+        if len(sorted_matte_path_list) == 0:
+            logging.info("Empty cache_pattern")
+            return []
+
+        first = sorted_matte_path_list[0]
+        last = sorted_matte_path_list[-1]
+        cache_path = self.cache_folder / (
+            Path(first.name).with_suffix(f".{last.stem}.diff_list.txt")
+        )
+
+        if cache_path.exists():
+            logging.info(f"Loading '{cache_path}'")
+            skip_list = []
+            before_path = None
+            with open(cache_path, "r") as f:
+                for line, after_path in zip(f.readlines(), sorted_matte_path_list):
+                    fields = line.strip().split("\t")
+                    assert (
+                        len(fields) == 3
+                        and fields[1] == str(before_path)
+                        and fields[2] == str(after_path)
+                    ), f"diff_list file doesn't match cache_pattern ('{cache_path}'')"
+                    diff = float(fields[0])
+                    skip = (
+                        self.frames_diff_fraction_max is not None
+                        and diff < self.frames_diff_fraction_max
+                    )
+                    skip_list.append(skip)
+                    before_path = after_path
+            assert len(skip_list) == len(
+                sorted_matte_path_list
+            ), f"diff_list file doesn't match cache_pattern ('{cache_path}'')"
+            return skip_list
+
         skip_list = []
         reference_array = None
-        previous_array = None
-        for after_path in sorted_matte_path_list:
+        before_array = None
+        before_path = None
+        with open(cache_path.with_suffix(".txt.temp"), "w") as f:
+            for after_path in sorted_matte_path_list:
+                after_array = np.array(Image.open(after_path), "int16")
+                if reference_array is None:
+                    diff = 1.0
+                else:
+                    diff = np.abs(reference_array - after_array).mean() / 256.0
+                    if reference_array is not before_array:
+                        diff = max(
+                            diff, np.abs(before_array - after_array).mean() / 256.0
+                        )
+                skip = (
+                    self.frames_diff_fraction_max is not None
+                    and diff < self.frames_diff_fraction_max
+                )
+                skip_list.append(skip)
+                logging.info(
+                    f"'{after_path.name}', diff from ref&before {diff:.7f}, skip? {skip}"
+                )
+                f.write(f"{diff}\t{str(before_path)}\t{str(after_path)}\n")
+                before_array = after_array
+                before_path = after_path
+                if not skip:
+                    reference_array = after_array
+        shutil.move(cache_path.with_suffix(".txt.temp"), cache_path)
 
-            if self.frames_diff_fraction_max is None:
-                skip_list.append(False)
-                continue
-
-            after_array = np.array(Image.open(after_path), "int16")
-            if reference_array is None:
-                diff = 1.0
-            else:
-                diff = np.abs(reference_array - after_array).mean() / 256.0
-                if reference_array is not previous_array:
-                    diff = max(
-                        diff, np.abs(previous_array - after_array).mean() / 256.0
-                    )
-            skip = diff < self.frames_diff_fraction_max
-            skip_list.append(skip)
-            logging.info(
-                f"'{after_path.name}', diff from ref&previous {diff:.6f}, skip? {skip}"
-            )
-            previous_array = after_array
-            if not skip:
-                reference_array = after_array
         return skip_list
 
 
@@ -542,7 +580,7 @@ if __name__ == "__main__":
 
     Paint(
         output_folder=folder / "SkinMatte/Comp 2/outputs/run_test1",
-        matte_pattern=folder / "SkinMatte/Comp 2/Comp 2_0000*.jpg",
+        matte_pattern=folder / "SkinMatte/Comp 2/*.*.jpg",
         brush_pattern=folder / "brushes/*.png",
         stroke_count_max=5,
         penalty_area_pixels_max=4,
