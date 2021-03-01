@@ -21,8 +21,11 @@ else:  # Carl's computer
     # top_folder = Path(r"M:\deldir\Watercolor Animation Assets")
     top_folder = Path(r"E:\Dropbox\Watercolor Animation Assets")
     brush_pattern = top_folder / "BRUSHES/*.png"
-    frame_runner = LocalMultiProc(processor_count)
-    preview_runner = LocalMultiThread(processor_count)
+    if True:
+        frame_runner = LocalMultiProc(processor_count)
+        preview_runner = LocalMultiThread(processor_count)
+    else:
+        frame_runner, preview_runner = None, None
 
 # Set to None to render all frames. Set to 0 to preview 1st frame
 # set to 10 to preview 11th frame.
@@ -30,10 +33,12 @@ preview_frame = None
 
 Paint(
     preview_frame=preview_frame,
-    output_folder=top_folder / "SkinMatte/Comp 2/outputs/cmk12",
-    matte_pattern=top_folder / "SkinMatte/Comp 2/*00000*.*",
+    output_folder=top_folder / "SkinMatte/Comp 2/outputs/cmk12blur",
+    matte_pattern=top_folder / "SkinMatte/Comp 2/*.*",
     brush_pattern=brush_pattern,
-    stroke_count_max=1000,
+    background_pattern=top_folder / "BG textures/*.*",
+    background_matte_blur=3,
+    stroke_count_max=500,
     batch_count=50,
     penalty_area_pixels_max=30,
     brush_efficiency_min=None,

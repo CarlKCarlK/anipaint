@@ -8,7 +8,7 @@ from typing import Any, Tuple
 
 import numpy as np
 from numpy.lib.stride_tricks import as_strided
-from PIL import Image
+from PIL import Image, ImageFilter, ImageOps
 from PIL.ImageDraw import Draw
 from pysnptools.util.mapreduce1 import map_reduce
 from scipy.ndimage.filters import gaussian_filter
@@ -46,7 +46,12 @@ def composite(
     rot = rot.crop(rot.getbbox())
     x1 = int(x - rot.width / 2)
     y1 = int(y - rot.height / 2)
-    result.alpha_composite(rot, dest=(x1, y1))
+    if x1 >= 0 and y1 >= 0:
+        result.alpha_composite(rot, dest=(x1, y1))
+    else:
+        new_stamp = Image.new("RGBA", result.size, (0, 0, 0, 0))
+        new_stamp.paste(rot, (x1, y1))
+        result.alpha_composite(new_stamp)
 
     return result
 
@@ -127,6 +132,7 @@ class Paint:
     preview_frame: int = None
     batch_count: int = 1
     background_pattern: Any = None
+    background_matte_blur: float = None
     candidate_range: Tuple[int] = (1, 256)
     credit_range: Tuple[int] = (1, 256)
     mixing_range: Tuple[int] = (0, 1)
@@ -387,13 +393,17 @@ class Paint:
             # print(old_credit_area_pixels_covered)
 
         if self.background_list is not None:
-            # matte_image = Image.open(matte_path)
+            matte_image = Image.open(matte_path)
+            if self.background_matte_blur is not None:
+                matte_image = matte_image.filter(
+                    ImageFilter.GaussianBlur(self.background_matte_blur)
+                )
             rng = np.random.RandomState(seed=self.seed)
-            background = self.background_list[
-                rng.choice(len(self.background_list))
-            ].copy()
-            background.alpha_composite(current_image, dest=(0, 0))
-            current_image = background
+            background = self.background_list[rng.choice(len(self.background_list))]
+            result = Image.new("RGBA", background.size, (0, 0, 0, 0))
+            result.paste(background, mask=ImageOps.grayscale(matte_image))
+            result.alpha_composite(current_image)
+            current_image = result
         return current_image
 
     def find_brush_efficiency(

@@ -22,6 +22,7 @@ Paint(
     output_folder=top_folder / "SkinMatte/Comp 2/outputs/run10",
     matte_pattern=top_folder / "SkinMatte/Comp 2/*.*",
     background_pattern=top_folder / "BG textures/*.*",
+    background_matte_blur=3,
     brush_pattern=brush_pattern,
     stroke_count_max=50,
     batch_count=50,

@@ -46,12 +46,21 @@ Notes:
 
 Parameters:
 
+* Folders and patterns for input and output
+    * output_folder=top_folder / "SkinMatte/Comp 2/outputs/run10",
+    * matte_pattern=top_folder / "SkinMatte/Comp 2/*.*",
+    * brush_pattern=top_folder / "brushes/*.png",
+    * background_pattern=top_folder / "BG textures/*.*",
+
+
 *   stroke_count_max=500,
     * number of stokes to try to paint
 *   batch_count=50,
     * number of stokes to paint at once
 *   penalty_area_pixels_max=30,
     * How many pixels are allowed in the masked off area
+*   background_matte_blur=3,
+    * How much to blur the matte used to composite in the background
 *   brush_efficiency_min=None,
     * Fraction between 0.0 and 1.0 telling how much of the brush
        must paint empty pixels. Prevents bush overlaps.
