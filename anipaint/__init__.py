@@ -160,6 +160,7 @@ class Paint:
             self.cache_folder = Path(self.cache_folder)
         else:
             self.cache_folder = self.matte_pattern.parent / "cache"
+        os.makedirs(self.cache_folder, exist_ok=True)
 
         if self.preview_frame is None:
             os.makedirs(self.output_folder, exist_ok=True)
@@ -393,11 +394,22 @@ class Paint:
             # print(f"frame_seed {frame_seed}")
             rng = np.random.RandomState(seed=frame_seed)
             background = self.background_list[rng.choice(len(self.background_list))]
-            result = Image.new("RGBA", background.size, (0, 0, 0, 0))
+            background = self.tile_if_needed(background, matte_image)
+            result = Image.new("RGBA", matte_image.size, (0, 0, 0, 0))
             result.paste(background, mask=ImageOps.grayscale(matte_image))
             result.alpha_composite(current_image)
             current_image = result
         return current_image
+
+    @staticmethod
+    def tile_if_needed(background, matte_image):
+        if background.size != matte_image.size:
+            new_background = Image.new("RGB", matte_image.size, (0, 0, 0))
+            for x in range(0, matte_image.size[0], background.size[0]):
+                for y in range(0, matte_image.size[1], background.size[1]):
+                    new_background.paste(background, (x, y))
+            background = new_background
+        return background
 
     def find_brush_efficiency(
         self,
