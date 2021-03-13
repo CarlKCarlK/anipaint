@@ -1,3 +1,4 @@
+import json
 import logging
 import math
 import os
@@ -182,6 +183,28 @@ class Paint:
             if self.background_pattern is not None
             else None
         )
+
+    @staticmethod
+    def save(preset, **kwargs):
+        preset = Path(preset)
+        assert not preset.exists(), "Preset already exists."
+        after = {}
+        for key, value in kwargs.items():
+            if isinstance(value, Path):
+                value = str(value)
+            after[key] = value
+        with open(preset.with_suffix(".temp.json"), "w") as f:
+            json.dump(after, f)
+        shutil.move(preset.with_suffix(".temp.json"), preset)
+
+    @staticmethod
+    def load(preset, **kwargs):
+        with open(preset) as f:
+            after = json.load(f)
+        for key, value in kwargs.items():
+            after[key] = value
+        paint = Paint(**after)
+        return paint
 
     def load_images(self, pattern):
         result_list = []

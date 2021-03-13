@@ -31,22 +31,28 @@ else:  # Carl's computer
 # set to 10 to preview 11th frame.
 preview_frame = None
 
-Paint(
+# Paint.save(
+#     preset="small.preset.json",
+#     brush_pattern=brush_pattern,
+#     background_pattern=top_folder / "BG textures/*.*",
+#     background_matte_blur=3,
+#     stroke_count_max=500,
+#     batch_count=50,
+#     penalty_area_pixels_max=30,
+#     brush_efficiency_min=None,
+#     candidate_range=(1, 256),
+#     credit_range=(1, 256),
+#     mixing_range=(255, 256),
+#     sprite_factor_range=(0.25, 1),
+#     frames_diff_fraction_max=None,
+# )
+
+Paint.load(
+    preset="small.preset.json",
     preview_frame=preview_frame,
     output_folder=top_folder / "SkinMatte/Comp 2/outputs/cmk12.2",
     matte_pattern=top_folder / "SkinMatte/Comp 2/*.*",
-    brush_pattern=brush_pattern,
-    background_pattern=top_folder / "BG textures/*.*",
-    background_matte_blur=3,
-    stroke_count_max=500,
-    batch_count=50,
-    penalty_area_pixels_max=30,
-    brush_efficiency_min=None,
-    candidate_range=(1, 256),
-    credit_range=(1, 256),
-    mixing_range=(255, 256),
-    sprite_factor_range=(0.25, 1),
-    frames_diff_fraction_max=None,
     frame_runner=frame_runner,
     preview_runner=preview_runner,
 ).paint()
+

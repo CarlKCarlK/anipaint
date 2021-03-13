@@ -1,0 +1,26 @@
+{
+    "brush_pattern": "E:\\Dropbox\\Watercolor Animation Assets\\BRUSHES\\*.png",
+    "background_pattern": "E:\\Dropbox\\Watercolor Animation Assets\\BG textures\\*.*",
+    "background_matte_blur": 3,
+    "stroke_count_max": 500,
+    "batch_count": 50,
+    "penalty_area_pixels_max": 30,
+    "brush_efficiency_min": null,
+    "candidate_range": [
+        1,
+        256
+    ],
+    "credit_range": [
+        1,
+        256
+    ],
+    "mixing_range": [
+        255,
+        256
+    ],
+    "sprite_factor_range": [
+        0.25,
+        1
+    ],
+    "frames_diff_fraction_max": null
+}
