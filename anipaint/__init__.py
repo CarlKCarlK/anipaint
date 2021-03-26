@@ -2,6 +2,7 @@ import json
 import logging
 import math
 import os
+import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -198,13 +199,71 @@ class Paint:
         shutil.move(preset.with_suffix(".temp.json"), preset)
 
     @staticmethod
-    def load(preset, **kwargs):
-        with open(preset) as f:
-            after = json.load(f)
-        for key, value in kwargs.items():
-            after[key] = value
-        paint = Paint(**after)
-        return paint
+    def last_digits_to_star(matte_file):
+        star = re.sub(r"(.*\D)(\d+)(.[^.]+)", "\g<1>*\g<3>", str(matte_file))
+        return Path(star)
+
+    # Priority
+    #     The function inputs (highest)
+    #     The name of the matte file
+    #     The preset (lowest)
+    @staticmethod
+    def batch(**kwargs):
+        if "preset_folder" in kwargs:
+            preset_folder = Path(kwargs["preset_folder"])
+            del kwargs["preset_folder"]
+        else:
+            preset_folder = None
+
+        assert "matte_pattern" in kwargs, "Expect 'matte_pattern' input"
+        matte_pattern = Path(kwargs["matte_pattern"])
+        matte_pattern_list = sorted(
+            {
+                Paint.last_digits_to_star(matte_file)
+                for matte_file in matte_pattern.parent.glob(matte_pattern.name)
+            }
+        )
+
+        for matte_pattern in matte_pattern_list:
+            logging.info(f"Working on '{matte_pattern.name}'")
+            try:
+
+                # !!!!cmk continue even of something goes wrong
+
+                name_dict = {}
+                for name_piece in str(matte_pattern.name).split("_"):
+                    if name_piece.endswith(")"):
+                        key, val = name_piece[:-1].split("(")
+                        name_dict[key] = val
+
+                if "preset" in name_dict:
+                    assert (
+                        preset_folder is not None
+                    ), "If a preset is given in matte name, expect a preset_folder"
+                    preset_file = preset_folder / (name_dict["preset"] + ".preset.json")
+                    assert (
+                        preset_file.exists()
+                    ), f"Expect preset file to exists '{str(preset_file)}'"
+
+                    with open(preset_file) as f:
+                        paint_dict = json.load(f)
+                    del name_dict["preset"]
+                else:
+                    paint_dict = {}
+
+                for key, value in name_dict.items():
+                    paint_dict[key] = value
+
+                for key, value in kwargs.items():
+                    paint_dict[key] = value
+
+                paint_dict["matte_pattern"] = matte_pattern
+
+                Paint(**paint_dict).paint()
+            except Exception as e:
+                logging.warn(
+                    f"Something went wrong; skipping to next matte pattern. ('{e}'')"
+                )
 
     def load_images(self, pattern):
         result_list = []

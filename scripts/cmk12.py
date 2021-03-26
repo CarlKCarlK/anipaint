@@ -31,28 +31,17 @@ else:  # Carl's computer
 # set to 10 to preview 11th frame.
 preview_frame = None
 
-# Paint.save(
-#     preset="small.preset.json",
-#     brush_pattern=brush_pattern,
-#     background_pattern=top_folder / "BG textures/*.*",
-#     background_matte_blur=3,
-#     stroke_count_max=500,
-#     batch_count=50,
-#     penalty_area_pixels_max=30,
-#     brush_efficiency_min=None,
-#     candidate_range=(1, 256),
-#     credit_range=(1, 256),
-#     mixing_range=(255, 256),
-#     sprite_factor_range=(0.25, 1),
-#     frames_diff_fraction_max=None,
-# )
 
-Paint.load(
-    preset="small.preset.json",
+# keep going if something goes wrong
+Paint.batch(
+    # Theo_crouch_blue_preset(medium)*.png
+    # Theo_crouch_red_preset(small)*.png
+    # ...
+    matte_pattern=top_folder / "SkinMatte/presettest/*.*",
+    output_folder=top_folder / "SkinMatte/outputs/run1",
+    preset_folder=top_folder / "presets",
     preview_frame=preview_frame,
-    output_folder=top_folder / "SkinMatte/Comp 2/outputs/cmk12.2",
-    matte_pattern=top_folder / "SkinMatte/Comp 2/*.*",
     frame_runner=frame_runner,
     preview_runner=preview_runner,
-).paint()
+)
 
