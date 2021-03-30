@@ -227,44 +227,44 @@ class Paint:
 
         for matte_pattern in matte_pattern_list:
             logging.info(f"Working on '{matte_pattern.name}'")
-            # cmk try:
+            try:
 
-            # !!!!cmk continue even of something goes wrong
+                # !!!!cmk continue even of something goes wrong
 
-            name_dict = {}
-            for name_piece in str(matte_pattern.name).split("_"):
-                if name_piece.endswith(")"):
-                    key, val = name_piece[:-1].split("(")
-                    name_dict[key] = val
+                name_dict = {}
+                for name_piece in str(matte_pattern.name).split("_"):
+                    if name_piece.endswith(")"):
+                        key, val = name_piece[:-1].split("(")
+                        name_dict[key] = val
 
-            if "preset" in name_dict:
-                assert (
-                    preset_folder is not None
-                ), "If a preset is given in matte name, expect a preset_folder"
-                preset_file = preset_folder / (name_dict["preset"] + ".preset.json")
-                assert (
-                    preset_file.exists()
-                ), f"Expect preset file to exists '{str(preset_file)}'"
+                if "preset" in name_dict:
+                    assert (
+                        preset_folder is not None
+                    ), "If a preset is given in matte name, expect a preset_folder"
+                    preset_file = preset_folder / (name_dict["preset"] + ".preset.json")
+                    assert (
+                        preset_file.exists()
+                    ), f"Expect preset file to exists '{str(preset_file)}'"
 
-                with open(preset_file) as f:
-                    paint_dict = json.load(f)
-                del name_dict["preset"]
-            else:
-                paint_dict = {}
+                    with open(preset_file) as f:
+                        paint_dict = json.load(f)
+                    del name_dict["preset"]
+                else:
+                    paint_dict = {}
 
-            for key, value in name_dict.items():
-                paint_dict[key] = value
+                for key, value in name_dict.items():
+                    paint_dict[key] = value
 
-            for key, value in kwargs.items():
-                paint_dict[key] = value
+                for key, value in kwargs.items():
+                    paint_dict[key] = value
 
-            paint_dict["matte_pattern"] = matte_pattern
+                paint_dict["matte_pattern"] = matte_pattern
 
-            Paint(**paint_dict).paint()
-            # except Exception as e:
-            #     logging.warn(
-            #         f"Something went wrong; skipping to next matte pattern. ('{e}'')"
-            #     )
+                Paint(**paint_dict).paint()
+            except Exception as e:
+                logging.warn(
+                    f"Something went wrong; skipping to next matte pattern. ('{e}'')"
+                )
 
     def load_images(self, pattern):
         result_list = []
