@@ -37,11 +37,10 @@ Paint.batch(
     # Theo_crouch_blue_preset(medium)*.png
     # Theo_crouch_red_preset(small)*.png
     # ...
-    matte_pattern=top_folder / "SkinMatte/presettest/*.*",
+    matte_pattern=top_folder / "SkinMatte/presettest/*/*.*",
     output_folder=top_folder / "SkinMatte/outputs/run1",
     preset_folder=top_folder / "presets",
     preview_frame=preview_frame,
     frame_runner=frame_runner,
     preview_runner=preview_runner,
 )
-
