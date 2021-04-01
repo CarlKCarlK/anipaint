@@ -139,6 +139,8 @@ class Paint:
     default_angle_degrees: float = 15
     default_angle_sd: float = 5
     sprite_factor_range: Tuple[float] = (1.0, 1.0)  # both inclusive
+    max_distance: int = 255
+    scale_height: bool = None
     frame_runner: Any = None
     preview_runner: Any = None
     cache_folder: Any = None
@@ -186,6 +188,23 @@ class Paint:
             else None
         )
 
+    #     if self.scale_height is not None:
+    #         scale_matte_pattern()
+    #         pass
+    #         # matte_pattern: Any
+
+    #         # brush_pattern: Any
+    #         # background_pattern: Any = None
+    #         # background_matte_blur: float = None
+    #         # candidate_range: Tuple[int] = (1, 256)
+    #         # credit_range: Tuple[int] = (1, 256)
+    #         # mixing_range: Tuple[int] = (0, 1)
+    #         # penalty_area_pixels_max: float = None
+    #         # brush_efficiency_min: float = None
+    #         # frames_diff_fraction_max: float = None
+    #         # sprite_factor_range: Tuple[float] = (1.0, 1.0)  # both inclusive
+    # def scale_matte_pattern(self):
+
     @staticmethod
     def save(preset, **kwargs):
         preset = Path(preset)
@@ -210,6 +229,12 @@ class Paint:
     #     The preset (lowest)
     @staticmethod
     def batch(**kwargs):
+        if "stop_on_errors" in kwargs:
+            del kwargs["stop_on_errors"]
+            stop_on_errors = True
+        else:
+            stop_on_errors = False
+
         if "preset_folder" in kwargs:
             preset_folder = Path(kwargs["preset_folder"])
             del kwargs["preset_folder"]
@@ -227,44 +252,51 @@ class Paint:
 
         for matte_pattern in matte_pattern_list:
             logging.info(f"Working on '{matte_pattern.name}'")
-            try:
+            if not stop_on_errors:
+                try:
+                    Paint.thing_to_try(matte_pattern, preset_folder, kwargs)
+                except Exception as e:
+                    logging.warn(
+                        f"Something went wrong; skipping to next matte pattern. ('{e}'')"
+                    )
+            else:
+                Paint.thing_to_try(matte_pattern, preset_folder, kwargs)
 
-                # !!!!cmk continue even of something goes wrong
+    @staticmethod
+    def thing_to_try(matte_pattern, preset_folder, kwargs):
 
-                name_dict = {}
-                for name_piece in str(matte_pattern.name).split("_"):
-                    if name_piece.endswith(")"):
-                        key, val = name_piece[:-1].split("(")
-                        name_dict[key] = val
+        # !!!!cmk continue even of something goes wrong
 
-                if "preset" in name_dict:
-                    assert (
-                        preset_folder is not None
-                    ), "If a preset is given in matte name, expect a preset_folder"
-                    preset_file = preset_folder / (name_dict["preset"] + ".preset.json")
-                    assert (
-                        preset_file.exists()
-                    ), f"Expect preset file to exists '{str(preset_file)}'"
+        name_dict = {}
+        for name_piece in str(matte_pattern.name).split("_"):
+            if name_piece.endswith(")"):
+                key, val = name_piece[:-1].split("(")
+                name_dict[key] = val
 
-                    with open(preset_file) as f:
-                        paint_dict = json.load(f)
-                    del name_dict["preset"]
-                else:
-                    paint_dict = {}
+        if "preset" in name_dict:
+            assert (
+                preset_folder is not None
+            ), "If a preset is given in matte name, expect a preset_folder"
+            preset_file = preset_folder / (name_dict["preset"] + ".preset.json")
+            assert (
+                preset_file.exists()
+            ), f"Expect preset file to exists '{str(preset_file)}'"
 
-                for key, value in name_dict.items():
-                    paint_dict[key] = value
+            with open(preset_file) as f:
+                paint_dict = json.load(f)
+            del name_dict["preset"]
+        else:
+            paint_dict = {}
 
-                for key, value in kwargs.items():
-                    paint_dict[key] = value
+        for key, value in name_dict.items():
+            paint_dict[key] = value
 
-                paint_dict["matte_pattern"] = matte_pattern
+        for key, value in kwargs.items():
+            paint_dict[key] = value
 
-                Paint(**paint_dict).paint()
-            except Exception as e:
-                logging.warn(
-                    f"Something went wrong; skipping to next matte pattern. ('{e}'')"
-                )
+        paint_dict["matte_pattern"] = matte_pattern
+
+        Paint(**paint_dict).paint()
 
     def load_images(self, pattern):
         result_list = []
@@ -332,7 +364,7 @@ class Paint:
         return output_path
 
     def cached_edge_distance(self, matte_path):
-        max_distance = 255
+        max_distance = self.max_distance
         threshold = 127
 
         cache_path = (self.cache_folder / matte_path.name).with_suffix(
@@ -386,6 +418,19 @@ class Paint:
 
     def paint_one(self, matte_path, outer_count, frame_index):
         edge_distance = self.cached_edge_distance(matte_path)
+
+        scale_shape = edge_distance.shape
+        pre_scale_shape = edge_distance.shape
+
+        if self.scale_height is not None:
+            scale_shape = (
+                self.scale_height,
+                edge_distance.shape[1] * self.scale_height // edge_distance.shape[0],
+            )
+            edge_image = Image.fromarray(edge_distance, mode="L")
+            edge_image = edge_image.resize(scale_shape[::-1])
+            edge_distance = np.array(edge_image)
+
         pre_candidate_points = (edge_distance >= self.candidate_range[0]) * (
             edge_distance < self.candidate_range[1]
         )
@@ -395,7 +440,7 @@ class Paint:
         penalty_area = edge_distance == 0
         directions = find_directions(edge_distance)
 
-        current_image = Image.new("RGBA", list(edge_distance.shape)[::-1], (0, 0, 0, 0))
+        current_image = Image.new("RGBA", list(scale_shape)[::-1], (0, 0, 0, 0))
 
         for outer_index in range(outer_count):
 
@@ -430,7 +475,11 @@ class Paint:
                 )
                 # print(f"inner_seed {inner_seed}")
                 candidate = self.random_candidate(
-                    candidate_points, edge_distance, directions, seed=inner_seed,
+                    candidate_points,
+                    edge_distance,
+                    directions,
+                    seed=inner_seed,
+                    pre_scale_shape=pre_scale_shape,
                 )
 
                 (
@@ -466,6 +515,11 @@ class Paint:
             for candidate in result_list:
                 if candidate is not None:
                     current_image = self.create_possible_image(current_image, candidate)
+
+        if self.scale_height is not None:
+            current_image = current_image.resize(
+                pre_scale_shape[::-1], resample=Image.LANCZOS
+            )
 
         if self.background_list is not None:
             matte_image = Image.open(matte_path)
@@ -530,7 +584,9 @@ class Paint:
         )
         return possible_image
 
-    def random_candidate(self, candidate_points, edge_distance, directions, seed):
+    def random_candidate(
+        self, candidate_points, edge_distance, directions, seed, pre_scale_shape
+    ):
         # print(seed)
         rng = np.random.RandomState(seed=seed)
         candidates_len = len(candidate_points[0])
@@ -538,7 +594,7 @@ class Paint:
         # print(seed, candidates_len, i)
         x, y = candidate_points[0][i], candidate_points[1][i]
         angle_degrees = self.find_angle(x, y, edge_distance, directions, rng)
-        brush_image = self.find_brush(rng)
+        brush_image = self.find_brush(rng, pre_scale_shape)
         candidate = {
             "brush_image": brush_image,
             "x": x,
@@ -547,7 +603,7 @@ class Paint:
         }
         return candidate
 
-    def find_brush(self, rng):
+    def find_brush(self, rng, pre_scale_shape):
         brush_image = self.brush_list[rng.choice(len(self.brush_list))]
 
         sprite_factor = (
@@ -561,11 +617,13 @@ class Paint:
             if self.sprite_factor_range[0] < self.sprite_factor_range[1]
             else self.sprite_factor_range[0]
         )
-        if sprite_factor != 1:
+        if sprite_factor != 1 or self.scale_height is not None:
+            if self.scale_height is not None:
+                sprite_factor *= self.scale_height / pre_scale_shape[0]
             brush_image = brush_image.resize(
                 (
-                    int(brush_image.width * sprite_factor + 0.5),
-                    int(brush_image.height * sprite_factor + 0.5),
+                    max(int(brush_image.width * sprite_factor + 0.5), 1),
+                    max(int(brush_image.height * sprite_factor + 0.5), 1),
                 ),
                 resample=Image.LANCZOS,
             )
