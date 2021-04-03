@@ -1,3 +1,7 @@
+# !!!cmk Easy: Stop on failure & remember all failures and report all at end
+# !!!cmk Some way to do multilevels of input, not ignoring output, and have multi output levels as wanted.
+
+
 import glob
 import json
 import logging
