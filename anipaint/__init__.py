@@ -1,5 +1,5 @@
 # !!!cmk Easy: Stop on failure & remember all failures and report all at end
-# !!!cmk Some way to do multilevels of input, not ignoring output, and have multi output levels as wanted.
+# !!!cmk Some way to do multi-levels of input, not ignoring output, and have multi output levels as wanted.
 
 
 import glob
@@ -18,7 +18,7 @@ from numpy.lib.stride_tricks import as_strided
 from PIL import Image, ImageFilter, ImageOps
 from PIL.ImageDraw import Draw
 from pysnptools.util.mapreduce1 import map_reduce
-from scipy.ndimage.filters import gaussian_filter
+from scipy.ndimage import gaussian_filter
 
 
 def composite(
@@ -77,8 +77,8 @@ def find_edge_distance(matte_path, max_distance=255, threshold=127):
     middle = expanded[:, :, 1, 1]
     logging.info(f"Finding distances for '{matte_path.name}'")
     for i in range(1, min(max_distance + 1, 255)):
-        minplus1 = np.min(expanded, axis=(-2, -1)) + 1
-        next = np.minimum(middle, minplus1)
+        min_plus1 = np.min(expanded, axis=(-2, -1)) + 1
+        next = np.minimum(middle, min_plus1)
         expanded[:, :, 1, 1] = next
         # logging.info(f"distance {i}")
         if middle.max() < 254:
@@ -205,7 +205,7 @@ class Paint:
 
     @staticmethod
     def last_digits_to_star(matte_file):
-        star = re.sub(r"(.*\D)(\d+)(.[^.]+)", "\g<1>*\g<3>", str(matte_file))
+        star = re.sub(r"(.*\D)(\d+)(.[^.]+)", r"\g<1>*\g<3>", str(matte_file))
         return Path(star)
 
     # Priority
@@ -317,18 +317,18 @@ class Paint:
 
     def fill_skips(self, result_w_skip_list):
         result_list = []
-        before_noskip_result = None
+        before_no_skip_result = None
         for result_w_skip, matte_path in zip(result_w_skip_list, self.matte_path_list):
             if result_w_skip is None:
                 if self.preview_frame is not None:
-                    result_list.append(before_noskip_result)
+                    result_list.append(before_no_skip_result)
                 else:
                     output_path = self.create_output_path(matte_path)
-                    shutil.copy(before_noskip_result, output_path)
+                    shutil.copy(before_no_skip_result, output_path)
                     result_list.append(output_path)
             else:
-                before_noskip_result = result_w_skip
-                result_list.append(before_noskip_result)
+                before_no_skip_result = result_w_skip
+                result_list.append(before_no_skip_result)
         return result_list
 
     def create_output_path(self, matte_path):
@@ -434,7 +434,10 @@ class Paint:
                 )
                 # print(f"inner_seed {inner_seed}")
                 candidate = self.random_candidate(
-                    candidate_points, edge_distance, directions, seed=inner_seed,
+                    candidate_points,
+                    edge_distance,
+                    directions,
+                    seed=inner_seed,
                 )
 
                 (
@@ -670,8 +673,7 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=logging.INFO)
 
-    folder = Path(r"m:\deldir\Watercolor Animation Assets")
-
+    # folder = Path(r"m:\deldir\Watercolor Animation Assets")
     # result = list(find_same(matte_pattern=folder / "Comp 2/Comp 2/*.jpg"))
 
     folder = Path(r"m:\deldir\Watercolor Animation Assets")
@@ -679,7 +681,7 @@ if __name__ == "__main__":
 
     Paint(
         output_folder=folder / "SkinMatte/Comp 2/outputs/run_test1",
-        matte_pattern=folder / "SkinMatte/Comp 2/*.*.jpg",
+        matte_pattern=folder / "SkinMatte/Comp 2/*.jpg",
         brush_pattern=folder / "brushes/*.png",
         stroke_count_max=5,
         penalty_area_pixels_max=4,

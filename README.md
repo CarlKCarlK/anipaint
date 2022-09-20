@@ -7,8 +7,8 @@ To set up a new machine
 
 * Install miniconda: https://docs.conda.io/en/latest/miniconda.html 64-bit windows Python 3.8
 * Open a Conda command window
-* pip install pysnptools
 * conda install pillow
+* pip install pysnptools
 
 To set up an AniPaint command window
 
@@ -30,7 +30,7 @@ See scripts/sample.py
 Notes:
 * Python is very picky about using spaces (not tabs)
 * Python is very picky about columns lining up
-* It will not render an output that is already there
+* AniPaint will not render an output that is already there
     * So, to get a fresh render, delete the output and aim it out new output folder.
 * "top_folder" is just a convenience.
 * File paths can use "/" or "\\", but if they use "\\" the string must
