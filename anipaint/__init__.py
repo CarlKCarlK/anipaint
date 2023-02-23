@@ -169,6 +169,7 @@ class Paint:
             self.cache_folder = self.matte_pattern.parent / "cache"
         os.makedirs(self.cache_folder, exist_ok=True)
 
+        self.output_folder = Path(self.output_folder)
         if self.preview_frame is None:
             os.makedirs(self.output_folder, exist_ok=True)
         self.matte_path_list = sorted(
@@ -183,12 +184,14 @@ class Paint:
         else:
             self.preview_runner = None
 
+        self.brush_pattern = Path(self.brush_pattern)
         self.brush_list = self.load_images(self.brush_pattern)
-        self.background_list = (
-            self.load_images(self.background_pattern)
-            if self.background_pattern is not None
-            else None
-        )
+
+        if self.background_pattern is not None:
+            self.background_pattern = Path(self.background_pattern)
+            self.background_list = self.load_images(self.background_pattern)
+        else:
+            self.background_list = None
 
     @staticmethod
     def save(preset, **kwargs):
@@ -603,7 +606,7 @@ class Paint:
     def _find_skips(self, sorted_matte_path_list):
 
         if len(sorted_matte_path_list) == 0:
-            logging.info("Empty cache_pattern")
+            logging.info("Empty matte_pattern")
             return []
 
         first = sorted_matte_path_list[0]
@@ -692,6 +695,7 @@ if __name__ == "__main__":
         sprite_factor_range=(0.25, 1),
         frames_diff_fraction_max=0.02,  # fraction difference
         frame_runner=None,
+        preview_frame=3,
     ).paint()
 
     print("!!!cmk")
