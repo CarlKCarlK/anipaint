@@ -1,29 +1,48 @@
 # AniPaint -- Paint animation mattes
 
-## Install & Run
+## Background
 
-To set up a new machine
+Anipaint is a Python program created by Carl & Ben to paint animation mattes.
 
-* Install miniconda: <https://docs.conda.io/en/latest/miniconda.html> 64-bit windows Python 3.8
+The code is currently proprietary. We're currently sharing it with our friends.
+
+It should run PC, Mac, or Linux. We run it on a PC. Carl can test on Linux. We’ve never tested it on a Mac.
+
+It is a “command-line interface (CLI)” "scripting" “batch program”. In other words, you create a text file containing a script. Then, on a command line (or terminal), you type a command to run your script. The script runs and produces text and files as output. AniPaint has no graphical user interface (GUI) because programming GUIs takes 10 times more time.
+
+## One-Time Setup
+
+### To set up a new machine
+
+* [Install Miniconda Python](https://conda.io/projects/conda/en/latest/user-guide/install/index.html)
+* [Install Git](https://git-scm.com/download/)
 * Open a Conda command window
-* conda install pillow
-* pip install pysnptools
+  * On Windows, you press the Windows button and type “Anaconda Prompt”
+* conda create --yes --name anipaint python=3.8
+  * This creates a new environment called “anipaint” within Python 3.8
+* conda activate anipaint
+  * This tells Python to use the “anipaint” environment
+* pip install git+https://github.com/CarlKCarlK/anipaint.git
+  * This tells Python to install the AniPaint program from GitHub
 
-To set up an AniPaint command window
+To get lastest version from GitHub:
+* pip install --upgrade git+https://github.com/CarlKCarlK/anipaint.git
 
-* Open a Conda command window
-* cd /d to anipaint program folder (top level)
-* set pythonpath=%cd%
+## To run a script
 
-To run a script:
+* Get to the AniPaint command line
+  * Open a Conda command window (On Windows, you press the Windows button and type “Anaconda Prompt")
+  * conda activate anipaint
+* Move to the folder with your script
+  * Windows: cd /d FOLDER_WITH_SCRIPTS
+  * Linux: cd FOLDER_WITH_SCRIPTS
+  * Mac: cd FOLDER_WITH_SCRIPTS
 
-* Start with an AniPaint command window (with pythonpath set)
-* cd /d TO_FOLDER_WITH_SCRIPTS
-* python NAMEOFPROGRAM.PY
+* python NAMEOFSCRIPT.PY
 
 ## Creating a Script
 
-See scripts/sample.py
+See [scripts/sample.py](https://github.com/CarlKCarlK/anipaint/blob/main/scripts/sample.py)
 
 Notes:
 
@@ -32,8 +51,7 @@ Notes:
 * AniPaint will not render an output that is already there
   * So, to get a fresh render, delete the output and aim it out new output folder.
 * "top_folder" is just a convenience.
-* File paths can use "/" or "\\", but if they use "\\" the string must
-  start with an "r"
+* On Windows, file paths can use "/" or "\\", but if they use "\\" the string must start with an "r"
   * For example, r"E:\Dropbox\Watercolor Animation Assets")
 * Use "preview_frame" to turn on/off preview vs save to file.
 * It tries to center each stroke on an empty pixel
