@@ -4,7 +4,7 @@
 
 Anipaint is a Python program created by Carl & Ben to paint animation mattes.
 
-The code is currently proprietary. We're currently sharing it with our friends.
+The code is currently proprietary. We're sharing it with our friends.
 
 It should run PC, Mac, or Linux. We run it on a PC. Carl can test on Linux. We’ve never tested it on a Mac.
 
@@ -26,6 +26,7 @@ It is a “command-line interface (CLI)” "scripting" “batch program”. In o
   * This tells Python to install the AniPaint program from GitHub
 
 To get lastest version from GitHub:
+
 * pip install --upgrade git+https://github.com/CarlKCarlK/anipaint.git
 
 ## To run a script
